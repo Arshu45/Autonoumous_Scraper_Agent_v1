@@ -20,8 +20,14 @@ def run_exploration_agent(state: AgentState) -> AgentState:
     return state
 
 def run_generation_agent(state: AgentState) -> AgentState:
-    logger.info("Stub node: run_generation_agent on brand=%s", state.brand)
-    state.status = "generation"
+    logger.info("Running generation agent on brand=%s", state.brand)
+    try:
+        from agent.generation_agent import generate_scraper_config
+        state = generate_scraper_config(state)
+    except Exception as e:
+        logger.exception("Generation agent failed on brand=%s", state.brand)
+        state.status = "failed"
+        state.error = str(e)
     return state
 
 def run_validation_agent(state: AgentState) -> AgentState:

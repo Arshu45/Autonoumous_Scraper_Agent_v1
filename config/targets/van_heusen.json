@@ -4,16 +4,31 @@
   "spider": "image_promo",
   "extraction_strategy": "hybrid",
   "text_selectors": [
-    ".mgz-content-carouse-slide"
+    ".promo-header",
+    "[class*='promo']",
+    ".mgz-element-text span",
+    ".owl-item.active .mgz-content-carouse-slide p",
+    ".owl-stage .owl-item p span",
+    "div[class*='mgz-element-text'] p span",
+    ".mgz-carousel .mgz-content-carouse-slide"
   ],
-  "screenshot_selectors": [],
+  "screenshot_selectors": [
+    ".promo-header--top",
+    ".promo-header",
+    ".mgz-carousel.owl-carousel",
+    ".mgz-content-carouse-slide",
+    ".owl-stage-outer",
+    "div[class*='mgz-element-row'][class*='full_width']",
+    ".mgz-parallax-inner",
+    "section.react-plp-app__gender-landing-page",
+    "div[class*='mgz-element-text'] p",
+    ".widget.block.block-static-block"
+  ],
   "min_image_width": 400,
   "min_image_height": 150,
   "min_aspect_ratio": 1.2,
-  "exclude_url_patterns": [
-    "/logo", "/icon", "/avatar", "social", "payment", "brand-logo"
-  ],
   "request_delay_seconds": 4,
-  "scroll_depth": 3,
-  "enabled": true
+  "scroll_depth": 2,
+  "enabled": true,
+  "extraction_notes": "The site uses Magezon builder with complex nested structures and generated class names. Primary risks: (1) Carousel rotation may require waiting for active slide state; (2) Generated class IDs (e.g., 'susyduc', 'jnm73p0') are not targeted but consistent patterns like 'mgz-element', 'mgz-carousel', 'promo-header' provide resilience; (3) Terms and conditions disclaimers appear as small text with asterisks (*) - these should be captured but flagged as non-binding text; (4) The shirt promotion (3 for $119, 4 for $149) appears in multiple locations and may be deduplicated; (5) Medium anti-bot risk suggests potential for rate-limiting or dynamic content loading - scroll_depth set to 2 to capture lazy-loaded promotional sections. Expected offers: 2-3 unique promotions (Shirts bundle deal, Trousers $59, and potentially additional hero section messaging)."
 }

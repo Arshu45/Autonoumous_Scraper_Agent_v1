@@ -95,6 +95,7 @@ Rules:
 - screenshot_selectors: CSS selectors for elements to capture as screenshots for Vision API
 - Use [class*='partial'] selectors for resilience to class name changes
 - Provide at least 3 text_selectors and 3 screenshot_selectors
+- Do NOT use jQuery-style or non-standard selectors (e.g. :contains(), :has(), :first, :last). Use only valid native CSS selectors.
 - Set request_delay_seconds to 4 (default) unless the site is known to rate-limit aggressively
 - Set scroll_depth based on whether lazy-loaded content was detected
 

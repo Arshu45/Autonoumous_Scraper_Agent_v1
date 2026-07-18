@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 # Ensure project root is on path so `agent` package is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -122,6 +123,16 @@ while True:
 """
 
 
+def _make_docker_client(docker_sdk):
+    """Same socket auto-detection as sandbox_runner._get_docker_client."""
+    desktop_sock = Path.home() / ".docker" / "desktop" / "docker.sock"
+    if os.environ.get("DOCKER_HOST"):
+        return docker_sdk.from_env()
+    if desktop_sock.exists():
+        return docker_sdk.DockerClient(base_url=f"unix://{desktop_sock}")
+    return docker_sdk.from_env()
+
+
 def main() -> None:
     print("=" * 60)
     print("  Sandbox Violation Tests")
@@ -131,7 +142,7 @@ def main() -> None:
     # Verify Docker is reachable before running tests
     try:
         import docker as _docker
-        client = _docker.from_env()
+        client = _make_docker_client(_docker)
         info = client.info()
         print(f"\nDocker daemon: OK (server version {info.get('ServerVersion', 'unknown')})")
     except Exception as exc:

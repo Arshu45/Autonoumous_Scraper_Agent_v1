@@ -5,12 +5,39 @@ import base64
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 SANDBOX_IMAGE = "promo-scraper-sandbox:latest"
 NETWORK_NAME = "scraper-egress-only"
+
+# Docker Desktop on Linux uses a non-standard socket path.
+# Try that first, then fall back to the standard location.
+_DOCKER_DESKTOP_SOCK = Path.home() / ".docker" / "desktop" / "docker.sock"
+_STANDARD_SOCK = Path("/var/run/docker.sock")
+
+
+def _get_docker_client(docker_sdk):
+    """
+    Return a connected Docker client, auto-detecting Docker Desktop's socket.
+
+    Docker Desktop on Linux uses ~/.docker/desktop/docker.sock instead of
+    /var/run/docker.sock. If DOCKER_HOST is already set in the environment
+    (e.g. by the user's shell), honour it; otherwise probe both paths.
+    """
+    # 1. Honour explicit DOCKER_HOST if set
+    if os.environ.get("DOCKER_HOST"):
+        return docker_sdk.from_env()
+
+    # 2. Try Docker Desktop socket (Linux Docker Desktop)
+    if _DOCKER_DESKTOP_SOCK.exists():
+        logger.debug("Connecting via Docker Desktop socket: %s", _DOCKER_DESKTOP_SOCK)
+        return docker_sdk.DockerClient(base_url=f"unix://{_DOCKER_DESKTOP_SOCK}")
+
+    # 3. Fall back to standard socket (Docker Engine via apt/snap)
+    return docker_sdk.from_env()
 
 
 def detect_violations(logs: str, result: dict) -> list[str]:
@@ -123,7 +150,7 @@ def run_scraper_in_sandbox(
         env_vars["SCRAPER_CODE_B64"] = base64.b64encode(scraper_code.encode()).decode()
 
     try:
-        client = docker_sdk.from_env()
+        client = _get_docker_client(docker_sdk)
     except Exception as exc:
         logger.error("Cannot connect to Docker daemon: %s", exc)
         return {

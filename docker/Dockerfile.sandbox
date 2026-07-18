@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Minimal sandbox image for running generated scraper code in an isolated,
 # resource-capped Docker container.  Built as:
-#   docker build -f docker/Dockerfile.sandbox -t promo-scraper-sandbox:latest .
+# docker build -f docker/Dockerfile.sandbox -t promo-scraper-sandbox:latest .
 # Run from the repository root so the COPY paths resolve correctly.
 # ──────────────────────────────────────────────────────────────────────────────
 

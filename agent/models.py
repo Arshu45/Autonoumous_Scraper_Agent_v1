@@ -18,6 +18,8 @@ class SiteAnalysis(BaseModel):
     confidence_in_analysis: float = 0.0
     gemini_visual_summary: str = ""
     notes: str = ""
+    text_selectors: List[str] = Field(default_factory=list)
+    screenshot_selectors: List[str] = Field(default_factory=list)
 
 class GeneratedArtifacts(BaseModel):
     brand: str

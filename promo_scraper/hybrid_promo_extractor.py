@@ -398,10 +398,10 @@ class HybridPromoExtractor:
 
     @staticmethod
     def _norm_key(s: str) -> str:
-        # Strip punctuation/separators so near-identical strings (desktop vs.
-        # mobile-nav copies, or Gemini OCR variance like a trailing period)
+        # Strip punctuation/separators and all whitespace so near-identical strings
+        # (with/without spaces, desktop vs. mobile-nav copies, or Gemini OCR variance)
         # dedupe as one offer.
-        return re.sub(r"[^\w\s%$]", "", s).lower().strip()
+        return re.sub(r"[^\w%$]", "", s).lower().strip()
 
     def _run_playwright_extraction(self) -> list[dict]:
         """

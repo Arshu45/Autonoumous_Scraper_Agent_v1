@@ -458,5 +458,7 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
         anti_bot_risk=anti_bot_risk,
         confidence_in_analysis=0.8 if dom_analysis_data.get("text_selectors") or dom_analysis_data.get("screenshot_selectors") else 0.4,
         gemini_visual_summary=visual_data.get("summary", ""),
-        notes=dom_analysis_data.get("notes", "")
+        notes=dom_analysis_data.get("notes", ""),
+        text_selectors=dom_analysis_data.get("text_selectors", []),
+        screenshot_selectors=dom_analysis_data.get("screenshot_selectors", [])
     )

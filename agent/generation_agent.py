@@ -247,6 +247,7 @@ def generate_scraper_config(state: AgentState) -> AgentState:
             json.dump(config_json, f, indent=2)
             
         logger.info("Successfully generated and saved scraper configuration to %s", config_path)
+        state.status = "generated"
         
     except Exception as e:
         logger.exception("Generation agent failed on brand=%s", state.brand)

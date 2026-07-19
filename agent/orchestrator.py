@@ -31,9 +31,8 @@ def run_generation_agent(state: AgentState) -> AgentState:
     return state
 
 def run_validation_agent(state: AgentState) -> AgentState:
-    logger.info("Stub node: run_validation_agent on brand=%s", state.brand)
-    state.status = "validation"
-    return state
+    from agent.validation_agent import run_validation_agent as _run
+    return _run(state)
 
 def run_registration(state: AgentState) -> AgentState:
     logger.info("Stub node: run_registration on brand=%s", state.brand)

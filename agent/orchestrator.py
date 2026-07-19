@@ -35,9 +35,8 @@ def run_validation_agent(state: AgentState) -> AgentState:
     return _run(state)
 
 def run_registration(state: AgentState) -> AgentState:
-    logger.info("Stub node: run_registration on brand=%s", state.brand)
-    state.status = "registered"
-    return state
+    from agent.registration_agent import run_registration as _run
+    return _run(state)
 
 def route_after_validation(state: AgentState) -> str:
     # If validation_report is None or doesn't exist, default to reject

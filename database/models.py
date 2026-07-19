@@ -3,6 +3,7 @@ from sqlalchemy import (
     Column, Integer, String, Text,
     Boolean, DateTime, ForeignKey
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
@@ -20,6 +21,13 @@ class Competitor(Base):
     enabled     = Column(Boolean, default=True, nullable=False)
     added_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
     modified_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Agent-generated columns (Migration C)
+    extraction_strategy = Column(String(20), default='hybrid')
+    agent_generated     = Column(Boolean, default=False)
+    agent_confidence    = Column(Integer, nullable=True)
+    agent_notes         = Column(Text, nullable=True)
+    source_url          = Column(Text, nullable=True)
 
     # Relationships
     promotions  = relationship("Promotion", back_populates="competitor", cascade="all, delete-orphan")
@@ -60,3 +68,64 @@ class Promotion(Base):
 
     def __repr__(self):
         return f"<Promotion(id={self.id}, brand='{self.brand}', title='{self.offer_title[:40]}...')>"
+
+
+class AgentRunOutcome(Base):
+    """
+    Records the outcome of each agent pipeline run (initial validation and health checks).
+    run_type: 'initial_validation' | 'health_check'
+    still_healthy_at_check is NULL until a health check fills it in.
+    """
+    __tablename__ = 'agent_run_outcomes'
+
+    id                      = Column(Integer, primary_key=True, autoincrement=True)
+    brand                   = Column(String(255), nullable=True)
+    run_type                = Column(String(20), nullable=True)      # 'initial_validation' | 'health_check'
+    confidence_score        = Column(Integer, nullable=True)
+    score_breakdown         = Column(JSONB, nullable=True)
+    recommendation          = Column(String(20), nullable=True)
+    offers_extracted        = Column(Integer, nullable=True)
+    was_auto_approved       = Column(Boolean, nullable=True)
+    days_since_registration = Column(Integer, nullable=True)
+    still_healthy_at_check  = Column(Boolean, nullable=True)         # NULL until health check fills in
+    checked_at              = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<AgentRunOutcome(id={self.id}, brand='{self.brand}', run_type='{self.run_type}')>"
+
+
+class AgentAuditLog(Base):
+    """
+    Immutable audit trail for all agent actions.
+    action values: 'trigger_run' | 'approve' | 'reject' | 'edit_config'
+    details: config diff, rejection reason, etc. (JSONB)
+    """
+    __tablename__ = 'agent_audit_log'
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    brand      = Column(String(255), nullable=False)
+    user_id    = Column(String(255), nullable=False)
+    action     = Column(String(50), nullable=False)
+    details    = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<AgentAuditLog(id={self.id}, brand='{self.brand}', action='{self.action}')>"
+
+
+class PrefectTargetRegistry(Base):
+    """
+    Registry of brands that are actively registered with Prefect for scraping.
+    registered_by references the user_id from the audit log.
+    """
+    __tablename__ = 'prefect_target_registry'
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    brand         = Column(String(255), unique=True, nullable=True)
+    config_path   = Column(String(500), nullable=True)
+    enabled       = Column(Boolean, default=True)
+    registered_at = Column(DateTime, default=datetime.utcnow)
+    registered_by = Column(String(255), nullable=True)
+
+    def __repr__(self):
+        return f"<PrefectTargetRegistry(id={self.id}, brand='{self.brand}', enabled={self.enabled})>"

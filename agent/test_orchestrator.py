@@ -184,7 +184,7 @@ def test_generation_agent_node():
     with patch('agent.generation_agent.call_generation_llm', return_value=json.dumps(mock_llm_response)):
         final_state = generate_scraper_config(state)
         
-    assert final_state.status == "generation", f"Expected status 'generation', got {final_state.status}"
+    assert final_state.status == "generated", f"Expected status 'generated', got {final_state.status}"
     assert final_state.generated_artifacts is not None, "generated_artifacts should not be None"
     
     artifacts = final_state.generated_artifacts

@@ -1,0 +1,64 @@
+# docker/Dockerfile.sandbox
+# ──────────────────────────────────────────────────────────────────────────────
+# Minimal sandbox image for running generated scraper code in an isolated,
+# resource-capped Docker container.  Built as:
+# docker build -f docker/Dockerfile.sandbox -t promo-scraper-sandbox:latest .
+# Run from the repository root so the COPY paths resolve correctly.
+# ──────────────────────────────────────────────────────────────────────────────
+
+FROM python:3.12-slim
+
+# --- System dependencies for Playwright Chromium --------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        wget \
+        gnupg \
+        ca-certificates \
+        libnss3 \
+        libatk1.0-0 \
+        libatk-bridge2.0-0 \
+        libcups2 \
+        libdrm2 \
+        libxkbcommon0 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libxrandr2 \
+        libgbm1 \
+        libasound2 \
+        libpango-1.0-0 \
+        libcairo2 \
+        libx11-xcb1 \
+        libxcb-dri3-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Python packages -----------------------------------------------------------
+# Pinned to match host requirements.txt where possible; exact versions are
+# less critical inside the ephemeral sandbox than having them present at all.
+RUN pip install --no-cache-dir \
+        playwright \
+        requests \
+        beautifulsoup4 \
+        Pillow \
+        httpx \
+        google-genai \
+        litellm \
+        tenacity \
+        python-dotenv
+
+# Install Playwright browser binaries (Chromium only to keep image small)
+RUN playwright install chromium --with-deps
+
+# --- Copy application modules --------------------------------------------------
+# promo_scraper/ makes HybridPromoExtractor importable from sandbox_entrypoint
+WORKDIR /app
+
+COPY promo_scraper/ ./promo_scraper/
+
+# sandbox_entrypoint is the only agent code that runs inside the container
+COPY agent/sandbox_entrypoint.py ./sandbox_entrypoint.py
+
+# Ensure /app is on the Python path so both modules are importable
+ENV PYTHONPATH=/app
+
+# --- Entrypoint ---------------------------------------------------------------
+CMD ["python", "-m", "sandbox_entrypoint"]

@@ -42,7 +42,10 @@ def get_mock_generated_artifacts(state):
 
 @patch('agent.exploration_agent.explore_site', side_effect=get_mock_site_analysis)
 @patch('agent.generation_agent.generate_scraper_config', side_effect=get_mock_generated_artifacts)
-def test_auto_approve(mock_gen, mock_explore):
+@patch('agent.registration_agent.run_registration', side_effect=lambda s: (setattr(s, 'status', 'registered') or s))
+def test_auto_approve(mock_reg, mock_gen, mock_explore):
+    """Verifies the auto-approve routing path reaches the registration node.
+    DB persistence is tested separately in test_registration.py."""
     logger.info("--- Testing Auto-Approve Route (Score: 95, no violations) ---")
     graph = build_agent_graph()
     

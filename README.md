@@ -1,6 +1,6 @@
 # Autonomous Scraping Agent
 
-An autonomous agent system designed to dynamically explore competitor websites, analyze layouts, evaluate anti-bot protections, identify visual promotional areas, determine optimal CSS extraction strategies, and register scraping configurations.
+An autonomous agent system designed to dynamically explore competitor websites, analyze layouts, evaluate anti-bot protections, identify visual promotional areas, determine optimal CSS extraction strategies, validate scrapers in a Docker sandbox, and register approved configurations.
 
 The system is built on **LangGraph** to orchestrate step-by-step agent executions, using **Playwright** for browser automation, **LiteLLM** for Claude model access, and direct **Gemini** API fallbacks.
 
@@ -20,27 +20,27 @@ The autonomous pipeline is represented as a state graph coordinated by a LangGra
           │
           ▼
    ┌─────────────┐
-   │ Generation  │  ◄── generates CSS configuration for scraping target
+   │ Generation  │  ◄── generates HybridPromoExtractor config, saves to config/targets/
    └─────────────┘
           │
           ▼
    ┌─────────────┐
-   │ Validation  │  ◄── runs scraper in Docker sandbox, scores confidence
+   │ Validation  │  ◄── runs scraper in Docker sandbox, validates schema, scores confidence
    └─────────────┘
           │
       Conditional
-      Routing (based on validation score & sandbox violations)
+      Routing (based on confidence score & sandbox violations)
       ┌───┼───┐
       │   │   │
       │   │   ▼
-      │   │ [END] (Score < 70 or Sandbox Violation → Rejected)
+      │   │ [END] (score < 70 or any sandbox violation → Rejected)
       │   │
       │   ▼
-      │ [END] (Score 70 - 89 → Pending Human Review)
+      │ [END] (score 70–89 → Pending Human Review via Streamlit UI)
       │
       ▼
    ┌──────────────┐
-   │ Registration │ ◄── registers verified config (Score >= 90)
+   │ Registration │ ◄── registers verified config (score ≥ 90 → Auto-Approved)
    └──────────────┘
           │
           ▼
@@ -49,20 +49,28 @@ The autonomous pipeline is represented as a state graph coordinated by a LangGra
 
 ### Agent Nodes & Responsibilities
 
-1. **Exploration Agent** (`agent/exploration_agent.py`):
+1. **Exploration Agent** (`agent/exploration_agent.py`) — **fully implemented**:
    - Opens target site headlessly with stealth flags, custom headers, and webdriver detection blocks.
    - Evaluates page height, triggers dynamic scroll actions to bypass lazy loading, and resets scroll.
    - Computes an **anti-bot risk score** based on DOM presence of security elements (CAPTCHA, Cloudflare, etc.) and response headers.
-   - Cleans non-semantic HTML tags (e.g. `<script>`, `<style>`, `<head>`, `<svg>`) to generate a truncated DOM.
+   - Cleans non-semantic HTML tags (`<script>`, `<style>`, `<head>`, `<svg>`) to generate a truncated DOM.
    - Uses multimodal models (LiteLLM Claude falling back to direct Gemini) to identify visual promotional areas from pre/post-scroll screenshots.
-   - Evaluates cleaned DOM structure alongside the visual analysis to recommend the extraction strategy and suggest selectors.
+   - Evaluates cleaned DOM alongside visual analysis to recommend extraction strategy and CSS selectors.
+
 2. **Generation Agent** (`agent/generation_agent.py`) — **fully implemented**:
-   - Generates target configurations matching the exploration recommendations.
+   - Generates target configs matching the exploration recommendations.
    - Saves config to `config/targets/<brand>.json` in `HybridPromoExtractor`-compatible format.
-   - Sets `state.status = "generated"` on success for unambiguous outcome logging.
-3. **Validation Agent** (`agent/orchestrator.py` - stub, wired in Task 5):
-   - Evaluates scraping coverage, compares output schema, and verifies security sandboxing.
-4. **Registration Agent** (`agent/orchestrator.py` - stub):
+   - Sets `state.status = "generated"` on success.
+
+3. **Validation Agent** (`agent/validation_agent.py`) — **fully implemented (Task 5)**:
+   - Runs the generated scraper inside the Docker sandbox via `sandbox_runner.run_scraper_in_sandbox()`.
+   - If sandbox violations are detected, immediately forces `confidence_score=0`, `recommendation="reject"`.
+   - Parses offer data from container stdout, validates each offer against the schema.
+   - Computes a **confidence score** (0–100+) using yield rate, schema quality, field-population rates, and anti-bot risk penalty.
+   - Selects up to 3 sample offers for human preview.
+   - Populates `state.validation_report` (`ValidationReport`) and sets `state.status = "validation"`.
+
+4. **Registration Agent** (`agent/orchestrator.py` — stub, Task 6+):
    - Stores and activates approved configurations for production scraping.
 
 ---
@@ -111,16 +119,17 @@ PROMO_CATEGORIES="Home, Entertainment, Womens, Beauty, Kids, Toys, Menswear, Foo
 
 ## Docker Setup & Sandbox Infrastructure
 
-Task 4 introduced a **Docker sandbox** that runs every generated scraper in an isolated, resource-capped container before validation. This prevents malicious or runaway AI-generated code from affecting the host machine.
+The **Docker sandbox** runs every generated scraper in an isolated, resource-capped container before validation. This prevents malicious or runaway AI-generated code from affecting the host machine.
 
 ### What the sandbox enforces
+
 | Constraint | Value |
 |---|---|
 | Max RAM | 512 MB (OOM kill if exceeded) |
 | Max CPU | 1 core |
 | Max processes | 64 (prevents fork bombs) |
 | Filesystem | Read-only (only `/tmp` is writable, max 64 MB) |
-| Network | Outbound HTTPS to target domain only |
+| Network | Egress-filtered Docker bridge network |
 | Capabilities | All Linux capabilities dropped |
 
 ### Prerequisites
@@ -129,13 +138,13 @@ Task 4 introduced a **Docker sandbox** that runs every generated scraper in an i
 
 ### Step 1 — Start Docker Desktop
 
-Docker Desktop does **not** use `systemctl` like regular Docker Engine. Start it with:
+Docker Desktop on Linux uses a non-standard socket (`~/.docker/desktop/docker.sock`). The `sandbox_runner` auto-detects this. Start Docker with:
 
 ```bash
 systemctl --user start docker-desktop
 ```
 
-> You need to run this once per login session. To check it's running: `docker info`
+> Run once per login session. To check it's running: `docker info`
 
 ### Step 2 — Build the sandbox image
 
@@ -145,11 +154,9 @@ Run from the **repository root** (not from inside `docker/`):
 docker build -f docker/Dockerfile.sandbox -t promo-scraper-sandbox:latest .
 ```
 
-This takes ~10 minutes on first run (downloads Chromium). Subsequent builds use the cache and are instant.
+> The build context must be the repo root — `COPY promo_scraper/` and `COPY agent/sandbox_entrypoint.py` resolve relative to it.
 
 ### Step 3 — Create the egress network
-
-The network restricts containers to only talk to the target scraping domain:
 
 ```bash
 # With iptables (Linux Docker Engine — requires sudo):
@@ -174,13 +181,56 @@ sudo ./docker/setup_egress_network.sh teardown
 docker network rm scraper-egress-only
 ```
 
-> **Note:** The network only needs to be created once. It persists until you explicitly remove it or restart Docker Desktop.
+> **Note:** The network persists until explicitly removed or Docker Desktop restarts. If missing after a restart, re-run the create command above.
 
 ---
 
-## Executing the System
+## Running the Tests
 
-### Running Sandbox Violation Tests
+### Validation Agent Tests (no Docker required)
+
+Tests all 5 validation scenarios by mocking `run_scraper_in_sandbox`:
+
+```bash
+../env/bin/python agent/test_validation.py
+```
+
+Expected output:
+```
+[test_clean_5_offers]
+  ✓ recommendation == auto_approve — got: 'auto_approve'
+  ✓ confidence_score >= 90 — got: 105
+  ✓ offers_extracted == 5 — got: 5
+  ✓ schema_valid is True — got: True
+  ...
+  ✓ OVERALL test_clean_5_offers
+
+[test_zero_offers]
+  ✓ recommendation == reject
+  ✓ confidence_score == 10
+  ...
+
+[test_sandbox_violation]
+  ✓ recommendation == reject
+  ✓ confidence_score == 0
+  ...
+
+[test_high_antibot_penalty]
+  ✓ high-risk score is exactly 20 lower than low-risk score
+  ✓ score_breakdown.antibot_penalty == -20
+  ...
+
+[test_timeout_crash]
+  ✓ recommendation == reject
+  ✓ confidence_score == 0
+  ...
+
+==================================================
+Results: 25/25 checks passed
+🎉 All validation agent tests passed!
+```
+
+### Sandbox Violation Tests (requires Docker)
 
 Verifies that the Docker sandbox correctly blocks filesystem writes, unauthorized network access, and memory exhaustion:
 
@@ -198,19 +248,18 @@ Results: 3/3 passed
 ✓  All 3 tests PASSED.
 ```
 
-### Running Unit Tests (Routing & Graph Mocked Runs)
-Execute the orchestrator unit tests to verify the routing flows based on validation scores and sandbox checks:
+### Orchestrator Unit Tests (mocked, no Docker required)
+
+Verifies graph routing logic across all conditional edges:
+
 ```bash
-PYTHONPATH=. ../env/bin/python3 agent/test_orchestrator.py
+../env/bin/python agent/test_orchestrator.py
 ```
 
 Expected output: `🎉 All orchestrator and generation agent tests passed successfully!`
 
-### Running the Exploration Agent (Live Dynamic Analysis)
-To test the site exploration agent directly on a live retail page:
-Create or run a script calling `explore_site(url, brand)`.
+### Exploration Agent (live site — hits external APIs)
 
-Example test invocation:
 ```bash
 PYTHONPATH=. ../env/bin/python3 -c "
 from agent.exploration_agent import explore_site
@@ -220,26 +269,82 @@ print('Anti-bot risk:', res.anti_bot_risk)
 "
 ```
 
-The system will print token usage logs and USD costing breakdowns for both steps:
-- **Visual Call**:
-  `LiteLLM Vision SUCCESS: model=openai/claude-haiku-4.5 | prompt_tokens=3436 | completion_tokens=544 | total_tokens=3980 | cost=$0.006156`
-- **DOM Reasoning Call**:
-  `LiteLLM Reasoning SUCCESS: model=openai/claude-haiku-4.5 | prompt_tokens=19975 | completion_tokens=522 | total_tokens=20497 | cost=$0.022585`
+---
+
+## Confidence Scoring (Validation Agent)
+
+The validation agent computes a confidence score (0–100+) that determines the routing outcome:
+
+| Score band | Routing | Meaning |
+|---|---|---|
+| ≥ 90 | `auto_approve` → Registration | Scraper meets quality bar; config activated |
+| 70–89 | `pending` → Streamlit UI | Human review required before activation |
+| < 70 | `reject` → END | Config discarded; re-exploration recommended |
+| Any violation | `reject` (score forced to 0) | Sandbox security breach; instant discard |
+
+### Scoring breakdown
+
+| Component | Condition | Δ Score |
+|---|---|---|
+| Base (yield ≥ 5 offers or yield_rate ≥ 80%) | `offers_extracted ≥ 5` or `offers / estimated ≥ 0.8` | +70 |
+| Base (yield ≥ 1 offer) | At least 1 offer returned | +50 |
+| Base (yield = 0) | No offers found | +10 |
+| Schema 100% valid | All offers pass schema check | +20 |
+| Schema ≥ 80% valid | | +10 |
+| Title populated (all) | `title` non-empty on 100% of offers | +5 |
+| Category populated (≥ 80%) | `category` not None on ≥ 80% | +5 |
+| Discount populated (≥ 50%) | `discount_min` not None on ≥ 50% | +5 |
+| Anti-bot: high risk | `anti_bot_risk == "high"` | −20 |
+| Anti-bot: medium risk | `anti_bot_risk == "medium"` | −5 |
+| **Sandbox violation override** | Any violation in result | **= 0** |
+
+The full per-term breakdown is stored in `ValidationReport.score_breakdown` for display in the Task 6 Streamlit UI.
 
 ---
 
-## Key Files — Task 4 Sandbox
+## Key Files
+
+### Core Agent Pipeline
 
 | File | Purpose |
 |---|---|
-| `docker/Dockerfile.sandbox` | Minimal Python 3.12 image with Playwright + all scraper dependencies |
+| `agent/models.py` | `AgentState`, `SiteAnalysis`, `GeneratedArtifacts`, `ValidationReport` Pydantic models |
+| `agent/orchestrator.py` | LangGraph graph definition; wires all agent nodes and conditional routing |
+| `agent/exploration_agent.py` | Live Playwright browser, anti-bot scoring, Gemini vision analysis |
+| `agent/generation_agent.py` | LLM config generator; saves `config/targets/<brand>.json` |
+| `agent/validation_agent.py` | **Task 5** — sandbox execution, schema validation, confidence scoring |
+| `agent/prompts.py` | All 5 LLM prompt constants |
+
+### Sandbox Infrastructure
+
+| File | Purpose |
+|---|---|
+| `docker/Dockerfile.sandbox` | Minimal Python 3.12 image with Playwright + scraper dependencies |
 | `docker/setup_egress_network.sh` | Creates/tears down the egress-filtered Docker network |
 | `agent/sandbox_entrypoint.py` | Runs **inside** the container; reads config from env vars, executes scraper |
 | `agent/sandbox_runner.py` | Host-side: creates container, enforces limits, detects violations |
-| `agent/test_sandbox.py` | Tests 3 violation scenarios (filesystem / network / memory) |
-| `docs/HANDOFF_TASK_4.md` | Full command reference and Task 5 API contract |
 
-### Sandbox violation types (returned by `sandbox_runner.run_scraper_in_sandbox()`)
+### Tests
+
+| File | Purpose | Docker needed? |
+|---|---|---|
+| `agent/test_validation.py` | 5 scenarios for validation agent (mocked sandbox) | No |
+| `agent/test_orchestrator.py` | Graph routing + generation agent unit tests | No |
+| `agent/test_sandbox.py` | 3 live sandbox violation scenarios | **Yes** |
+
+### Documentation
+
+| File | Contents |
+|---|---|
+| `docs/HANDOFF_TASK_5.md` | Task 5 summary, per-scenario `ValidationReport` shapes, Task 6 API surface |
+| `docs/HANDOFF_TASK_4.md` | Sandbox infrastructure setup, `sandbox_runner` API contract |
+| `docs/implementation_plan.md` | Full system design and scoring specification |
+
+---
+
+## Sandbox Violation Types
+
+Returned by `sandbox_runner.run_scraper_in_sandbox()` in the `violations` list:
 
 | Violation | Trigger | Meaning |
 |---|---|---|
@@ -247,6 +352,20 @@ The system will print token usage logs and USD costing breakdowns for both steps
 | `filesystem_violation` | EROFS in logs | Tried to write outside `/tmp` |
 | `network_violation` | Connection error in logs | Tried to reach a blocked host |
 | `nonzero_exit` | Any other non-zero exit | Generic scraper failure |
-| `timeout_or_crash` | Docker API error | Container failed to start or timed out |
+| `timeout_or_crash` | Docker API error / timeout | Container failed to start or timed out |
 
-Any non-empty violations list → automatic rejection in the validation pipeline.
+Any non-empty `violations` list → `confidence_score = 0`, `recommendation = "reject"`.
+
+---
+
+## Task Status
+
+| Task | Status | Description |
+|---|---|---|
+| Task 0 | ✅ Done | Repo scaffold, DB schema, base models |
+| Task 1 | ✅ Done | Exploration agent (Playwright + Gemini vision) |
+| Task 2 | ✅ Done | LangGraph orchestrator + routing |
+| Task 3 | ✅ Done | Generation agent (LLM config generator) |
+| Task 4 | ✅ Done | Docker sandbox infrastructure |
+| Task 5 | ✅ Done | Validation agent (sandbox execution + confidence scoring) |
+| Task 6 | 🔲 Next | Streamlit approval UI (human-in-the-loop for `pending` reports) |

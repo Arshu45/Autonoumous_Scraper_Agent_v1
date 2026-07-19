@@ -63,17 +63,46 @@ def _load_target_file(config_file: str) -> dict | None:
 
 
 def load_targets(target_path: str | None = None) -> list[dict]:
-    """Load one target config or scan config/targets/*.json."""
+    """Load targets from DB registry, falling back to filesystem glob."""
     if target_path:
         cfg = _load_target_file(target_path)
         return [cfg] if cfg else []
 
+    try:
+        from database.models import PrefectTargetRegistry
+        session = get_session()
+        rows = session.query(PrefectTargetRegistry).filter_by(enabled=True).all()
+        if rows:
+            targets = []
+            for row in rows:
+                cfg = _load_target_file(row.config_path)
+                if cfg:
+                    targets.append(cfg)
+            session.close()
+            if targets:
+                # Also include filesystem-only configs not in the registry
+                fs_targets = _load_filesystem_targets()
+                registered_brands = {t["brand"] for t in targets}
+                for t in fs_targets:
+                    if t["brand"] not in registered_brands:
+                        targets.append(t)
+                return targets
+        session.close()
+    except Exception:
+        pass  # fall back to filesystem
+
+    return _load_filesystem_targets()
+
+
+def _load_filesystem_targets() -> list[dict]:
+    """Original glob-based loading — backward compatible."""
     targets = []
     for config_file in sorted(glob.glob(os.path.join(CONFIG_DIR, "*.json"))):
         cfg = _load_target_file(config_file)
         if cfg:
             targets.append(cfg)
     return targets
+
 
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────

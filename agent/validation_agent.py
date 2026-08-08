@@ -369,6 +369,41 @@ def run_validation_agent(state: AgentState) -> AgentState:
     state.validation_report = report
     state.status = "validation"
 
+    # Save to agent_run_outcomes table so it can be queried by the dashboard
+    from database.connection import get_session
+    from database.models import AgentRunOutcome
+    
+    # Pack sample offers and schema errors into score_breakdown for storage
+    db_breakdown = dict(score_breakdown or {})
+    db_breakdown["sample_offers"] = sample_offers
+    db_breakdown["schema_errors"] = schema_errors
+    db_breakdown["issues"] = issues
+    db_breakdown["sandbox_violations"] = violations
+    
+    try:
+        db_session = get_session()
+        try:
+            db_session.add(AgentRunOutcome(
+                brand=brand,
+                run_type="initial_validation",
+                confidence_score=confidence_score,
+                score_breakdown=db_breakdown,
+                recommendation=recommendation,
+                offers_extracted=len(offer_items),
+                was_auto_approved=False,
+                days_since_registration=None,
+                still_healthy_at_check=None,
+            ))
+            db_session.commit()
+            logger.info("Inserted agent_run_outcomes in validation agent for brand=%s", brand)
+        except Exception as exc:
+            db_session.rollback()
+            logger.warning("Failed to write agent_run_outcomes in validation agent: %s", exc)
+        finally:
+            db_session.close()
+    except Exception as exc:
+        logger.warning("Could not open session for agent_run_outcomes in validation agent: %s", exc)
+
     logger.info(
         "Validation complete for brand=%s: score=%d recommendation=%s",
         brand, confidence_score, recommendation,

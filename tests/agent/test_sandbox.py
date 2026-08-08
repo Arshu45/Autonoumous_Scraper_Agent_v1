@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# agent/test_sandbox.py
+# tests/agent/test_sandbox.py
 # ──────────────────────────────────────────────────────────────────────────────
 # Standalone test for the sandbox infrastructure.
 # Tests three deliberately misbehaving scrapers WITHOUT touching the real
 # agent pipeline.
 #
 # Usage (from repo root):
-#   ../env/bin/python agent/test_sandbox.py
+#   python -m pytest tests/agent/test_sandbox.py
 #
 # Prerequisites:
 #   1. Docker daemon running
@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 # Ensure project root is on path so `agent` package is importable
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from agent.sandbox_runner import run_scraper_in_sandbox
 

@@ -348,18 +348,48 @@ class HybridPromoExtractor:
         self._skip_reasons[reason] = self._skip_reasons.get(reason, 0) + 1
 
     def _create_stealth_page(self, pw) -> tuple[Any, Any]:
-        """Launch browser and context with stealth settings to bypass anti-bot screens."""
-        browser = pw.chromium.launch(
-            channel="chrome",
+        """Launch browser and context with stealth settings to bypass anti-bot screens.
+
+        Browser channel resolution order (highest to lowest priority):
+          1. config key  'browser_channel'          (per-target override)
+          2. env var     PLAYWRIGHT_BROWSER_CHANNEL  (global override, e.g. set in Docker)
+          3. Default: try 'chrome' first; if Google Chrome is not installed
+             (e.g. inside the Docker sandbox which only has Playwright Chromium),
+             silently retry with no channel so Playwright uses its bundled binary.
+        """
+        channel: str | None = (
+            self.cfg.get("browser_channel")
+            or os.getenv("PLAYWRIGHT_BROWSER_CHANNEL")
+            or "chrome"
+        )
+
+        launch_kwargs = dict(
             headless=True,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
+                "--no-sandbox",
                 "--window-size=1440,900",
-            ]
+            ],
         )
+
+        # Try the preferred channel first; fall back to Playwright's bundled
+        # Chromium (no channel) if the binary is not present in this environment.
+        try:
+            browser = pw.chromium.launch(channel=channel, **launch_kwargs)
+        except Exception as channel_exc:
+            if channel and "not found" in str(channel_exc).lower():
+                logger.warning(
+                    "Browser channel '%s' not available (%s) — "
+                    "falling back to Playwright bundled Chromium.",
+                    channel, channel_exc,
+                )
+                browser = pw.chromium.launch(**launch_kwargs)
+            else:
+                raise
+
         context = browser.new_context(
             user_agent=_UA,
             viewport={"width": 1440, "height": 900},

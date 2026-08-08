@@ -1,4 +1,4 @@
-# agent/test_orchestrator.py
+# tests/agent/test_orchestrator.py
 
 import logging
 import sys
@@ -7,7 +7,7 @@ import json
 from unittest.mock import patch
 
 # Ensure the root of the project is in the python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from agent import build_agent_graph, AgentState, ValidationReport
 from agent.models import SiteAnalysis, GeneratedArtifacts

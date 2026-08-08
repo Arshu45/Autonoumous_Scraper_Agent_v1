@@ -149,6 +149,30 @@ def run_scraper_in_sandbox(
     if scraper_code:
         env_vars["SCRAPER_CODE_B64"] = base64.b64encode(scraper_code.encode()).decode()
 
+    # ── Forward host env vars required by HybridPromoExtractor ─────────────
+    # The container is fully isolated and does NOT inherit the host environment.
+    # We explicitly pass the minimum set of variables the scraper needs so it
+    # can initialise correctly (PROMO_CATEGORIES, API keys, tuning knobs).
+    # Do NOT forward DATABASE_URL or other secrets unrelated to scraping.
+    _PASSTHROUGH_ENV_VARS = [
+        # Required by HybridPromoExtractor.__init__ (raises EnvironmentError if missing)
+        "PROMO_CATEGORIES",
+        # Vision API credentials — used by _load_allowed_categories + _client init
+        "GEMINI_API_KEY",
+        "LITELLM_API_KEY",
+        "LITELLM_API_BASE",
+        "VISION_LLM_MODEL",
+        "LLM_MODEL",
+        # Tuning knobs read at import time
+        "VISION_API_MIN_DELAY",
+        "VISION_COST_PER_MILLION_TOKENS_USD",
+    ]
+    for var in _PASSTHROUGH_ENV_VARS:
+        val = os.environ.get(var)
+        if val is not None:
+            env_vars[var] = val
+    logger.debug("Sandbox env vars forwarded: %s", list(env_vars.keys()))
+
     try:
         client = _get_docker_client(docker_sdk)
     except Exception as exc:
@@ -193,6 +217,10 @@ def run_scraper_in_sandbox(
         violations = detect_violations(logs, result)
         exit_code = result.get("StatusCode")
         logger.info("Sandbox finished: exit_code=%s violations=%s", exit_code, violations)
+        if exit_code != 0 and logs.strip():
+            # Surface the container's stderr/stdout so failures are visible
+            # in the agent log without needing a separate `docker run` debug session.
+            logger.warning("Sandbox container output (exit=%s):\n%s", exit_code, logs.strip())
         return {"exit_code": exit_code, "logs": logs, "violations": violations}
 
     except Exception as exc:

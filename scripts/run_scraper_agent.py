@@ -22,6 +22,9 @@ import os
 # Ensure the root of the project is in the python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before any agent imports so os.environ has PROMO_CATEGORIES, API keys, etc.
+
 def main():
     parser = argparse.ArgumentParser(description="Run the autonomous scraper agent.")
     parser.add_argument("--url", required=True, help="Target website URL to analyse and scrape")

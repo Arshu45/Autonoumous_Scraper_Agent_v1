@@ -1,4 +1,4 @@
-# agent/test_registration.py
+# tests/agent/test_registration.py
 """
 Standalone tests for the Registration Agent (Task 6).
 
@@ -22,7 +22,7 @@ import tempfile
 from unittest.mock import patch, MagicMock
 
 # Ensure project root is on the path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from dotenv import load_dotenv
 load_dotenv()

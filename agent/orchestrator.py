@@ -85,3 +85,24 @@ def build_agent_graph() -> StateGraph:
     graph.add_edge("registration", END)
     
     return graph.compile()
+
+def run_agent_pipeline(url: str, brand: str, requirements: str = "") -> dict:
+    """
+    Executes the agent graph in a standalone function safely callable from
+    ProcessPoolExecutor without importing Streamlit or UI modules.
+    """
+    state = AgentState(url=url, brand=brand, requirements=requirements)
+    graph = build_agent_graph()
+    res = graph.invoke(state)
+    
+    if hasattr(res, "model_dump"):
+        return res.model_dump()
+    elif isinstance(res, dict):
+        out = dict(res)
+        if "validation_report" in out and out["validation_report"] is not None:
+            vr = out["validation_report"]
+            if hasattr(vr, "model_dump"):
+                out["validation_report"] = vr.model_dump()
+        return out
+    return res
+

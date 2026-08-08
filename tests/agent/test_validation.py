@@ -1,4 +1,4 @@
-# agent/test_validation.py
+# tests/agent/test_validation.py
 """
 Standalone tests for the Validation Agent (Task 5).
 
@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 # Ensure project root is on the path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from agent.models import AgentState, GeneratedArtifacts, SiteAnalysis
 from agent.validation_agent import run_validation_agent

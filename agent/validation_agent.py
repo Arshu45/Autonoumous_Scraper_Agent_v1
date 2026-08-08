@@ -262,13 +262,14 @@ def run_validation_agent(state: AgentState) -> AgentState:
     if state.site_analysis is not None:
         anti_bot_risk = state.site_analysis.anti_bot_risk
 
-    # ---- 1. Run sandbox -------------------------------------------------------
-    logger.info("Launching sandbox for brand=%s (estimated offers: %d)", brand, estimated_offer_count)
+    # Read timeout from env var or default to 180s (60s was too short for multi-screenshot Vision extractions)
+    import os
+    sandbox_timeout = int(os.getenv("SANDBOX_TIMEOUT_SECONDS", "180"))
     try:
         sandbox_result = run_scraper_in_sandbox(
             scraper_code=scraper_code,
             config=config_json,
-            timeout_seconds=60,
+            timeout_seconds=sandbox_timeout,
         )
     except Exception as exc:
         logger.exception("Unexpected error calling run_scraper_in_sandbox for brand=%s", brand)
@@ -316,14 +317,32 @@ def run_validation_agent(state: AgentState) -> AgentState:
         return state
 
     # ---- 3. Parse offer data from logs ---------------------------------------
+    # The sandbox container log contains a mix of LiteLLM warnings, Playwright
+    # browser startup messages, and INFO lines — with the JSON result dict
+    # printed by sandbox_entrypoint.py as the LAST line. Scan in reverse so
+    # any amount of log noise before the result is safely skipped.
     offer_items: list[dict[str, Any]] = []
-    try:
-        parsed = json.loads(logs.strip())
-        offer_items = parsed.get("offers", [])
+    parsed_json: dict | None = None
+    for line in reversed(logs.splitlines()):
+        line = line.strip()
+        if not line or not line.startswith("{"):
+            continue
+        try:
+            parsed_json = json.loads(line)
+            break
+        except json.JSONDecodeError:
+            continue
+
+    if parsed_json is not None:
+        offer_items = parsed_json.get("offers", [])
         logger.info("Parsed %d offers from sandbox logs for brand=%s", len(offer_items), brand)
-    except (json.JSONDecodeError, AttributeError) as exc:
-        logger.warning("Could not parse JSON from sandbox logs for brand=%s: %s", brand, exc)
-        issues.append(f"Sandbox log is not valid JSON: {exc}")
+    else:
+        logger.warning(
+            "Could not find JSON result line in sandbox logs for brand=%s. "
+            "Log snippet (last 500 chars): %s",
+            brand, logs[-500:] if logs else "(empty)",
+        )
+        issues.append("Sandbox log contained no parseable JSON result line")
 
     # ---- 4. Schema validation ------------------------------------------------
     schema_valid, schema_errors = _validate_offers(offer_items)

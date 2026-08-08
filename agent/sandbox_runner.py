@@ -109,7 +109,7 @@ def detect_violations(logs: str, result: dict) -> list[str]:
 def run_scraper_in_sandbox(
     scraper_code: Optional[str],
     config: dict,
-    timeout_seconds: int = 60,
+    timeout_seconds: int = 180,
 ) -> dict:
     """
     Run the scraper inside a locked-down, single-use Docker container.
@@ -194,11 +194,14 @@ def run_scraper_in_sandbox(
             command=["python", "-m", "sandbox_entrypoint"],
             detach=True,
             network_mode=NETWORK_NAME,
-            mem_limit="512m",
+            mem_limit="768m",         # Raised: Chromium + Vision API responses need headroom
             nano_cpus=1_000_000_000,
-            pids_limit=64,
+            pids_limit=128,           # Raised: Chromium spawns broker/GPU/renderer subprocesses
             read_only=True,
-            tmpfs={"/tmp": "size=64m"},
+            tmpfs={
+                "/tmp": "size=256m",  # Raised: Chromium uses /tmp when --disable-dev-shm-usage
+                "/dev/shm": "size=256m",  # Critical: Chromium IPC; Docker default 64MB causes "Target crashed"
+            },
             cap_drop=["ALL"],
             security_opt=["no-new-privileges"],
             environment=env_vars,

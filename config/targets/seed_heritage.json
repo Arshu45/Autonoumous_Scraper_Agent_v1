@@ -1,0 +1,36 @@
+{
+  "brand": "Seed Heritage",
+  "source_url": [
+    {
+      "url": "https://www.seedheritage.com/ix",
+      "category_hint": "Seed Heritage is primarily Women's fashion and Kids. Storewide sales or site-wide discounts (e.g., 'Take a Further 40% Off Sale Styles') -> Womens. Assign Kids ONLY for explicit children, kids, or baby promotions. If you are unsure, always choose Womens."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    ".promo-storewide-grid",
+    ".promo-storewide-title",
+    ".global-taf",
+    "h2.wrapper"
+  ],
+  "screenshot_selectors": [
+    ".promo-storewide-grid",
+    ".global-taf",
+    "h2.wrapper"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

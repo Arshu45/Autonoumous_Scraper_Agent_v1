@@ -1,0 +1,31 @@
+{
+  "brand": "Just Jeans",
+  "source_url": [
+    {
+      "url": "https://justjeans.jgl.com.au",
+      "category_hint": "Denim, jeans, jackets, and casual tops -> Menswear or Womens depending on context."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "screenshot",
+  "text_selectors": [],
+  "screenshot_selectors": [
+    "picture img",
+    "img[src*='espot']",
+    "img[src*='Offer_Banner']"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

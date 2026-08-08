@@ -113,45 +113,125 @@ def apply_css():
     tbody tr:hover { background: #F6F6FA; }
     tbody td { font-size: 0.85rem; color: #505060; padding: 9px 12px; }
 
-    .weekly-matrix {
+    /* ── Weekly Competitor Matrix ────────────────────────────────── */
+
+    /* Category header row */
+    .wm-cat-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 0 6px 0;
+        margin-top: 1.5rem;
+    }
+    .wm-cat-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1A1A2E;
+        letter-spacing: -0.01em;
+    }
+    .wm-badge {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 500;
+        padding: 2px 9px;
+        border-radius: 20px;
+        white-space: nowrap;
+    }
+    .wm-badge-blue   { background: rgba(91,80,232,0.08); color: #4840C0; border: 1px solid rgba(91,80,232,0.2); }
+    .wm-badge-purple { background: rgba(150,70,200,0.08); color: #7030A8; border: 1px solid rgba(150,70,200,0.2); }
+
+    /* Scrollable table wrapper */
+    .wm-scroll {
+        overflow-x: auto;
+        border: 1px solid #E5E5EE;
+        border-radius: 10px;
+        background: #FFFFFF;
+        margin-bottom: 0.5rem;
+    }
+
+    /* Table shell */
+    .wm-table {
         width: 100%;
         table-layout: fixed;
-        border: 1px solid #E0E0EA;
-        border-radius: 8px;
-        overflow: hidden;
-        background: #FFFFFF;
-        margin-bottom: 1.5rem;
+        border-collapse: collapse;
+        min-width: 900px;
     }
-    .weekly-matrix th,
-    .weekly-matrix td {
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-        word-break: normal;
-        vertical-align: top;
-        line-height: 1.45;
+
+    /* Header cells */
+    .wm-brand-th {
+        width: 160px;
+        min-width: 140px;
+        background: #F4F4F8;
+        color: #505060;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 10px 14px;
+        text-align: left;
         border-bottom: 1px solid #E5E5EE;
         border-right: 1px solid #E5E5EE;
+        position: sticky;
+        left: 0;
+        z-index: 2;
     }
-    .weekly-matrix th {
-        background: #F7F7FA;
-        color: #707080;
+    .wm-day-th {
+        background: #F4F4F8;
+        color: #505060;
         font-size: 0.78rem;
-        text-transform: none;
-        letter-spacing: 0;
-    }
-    .weekly-matrix td {
-        min-height: 72px;
-        padding: 12px 10px;
-        color: #1A1A2E;
-    }
-    .weekly-matrix .brand-cell {
-        width: 150px;
         font-weight: 600;
-        white-space: normal;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 10px 14px;
+        text-align: left;
+        border-bottom: 1px solid #E5E5EE;
+        border-right: 1px solid #E5E5EE;
+        min-width: 160px;
     }
-    .weekly-matrix .promo-cell {
-        min-width: 140px;
+
+    /* Brand name cell — sticky */
+    .wm-brand-td {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #1A1A2E;
+        padding: 12px 14px;
+        vertical-align: top;
+        border-bottom: 1px solid #F2F2F6;
+        border-right: 2px solid #E5E5EE;
+        background: #FAFAFA;
+        white-space: nowrap;
+        position: sticky;
+        left: 0;
+        z-index: 1;
     }
+
+    /* Promo content cell */
+    .wm-promo-td {
+        font-size: 0.82rem;
+        color: #505060;
+        padding: 10px 14px;
+        vertical-align: top;
+        border-bottom: 1px solid #F2F2F6;
+        border-right: 1px solid #EBEBF2;
+        line-height: 1.5;
+    }
+    .wm-promo-td:hover { background: #F6F6FA; }
+
+    /* Empty day dash */
+    .wm-empty { color: #D0D0DC; text-align: center; }
+
+    /* Bullet item per promotion */
+    .wm-bullet {
+        padding: 3px 0 3px 10px;
+        border-left: 2px solid #E0E0EA;
+        margin-bottom: 5px;
+        line-height: 1.45;
+    }
+    .wm-bullet:last-child { margin-bottom: 0; }
+
+    /* Row hover */
+    .wm-table tbody tr:hover .wm-promo-td { background: #F6F6FA; }
+    .wm-table tbody tr:hover .wm-brand-td { background: #F2F2F8; }
 
     /* ── Streamlit widget tweaks ──────────────────────────────────── */
     .stSelectbox > div > div, .stMultiSelect > div > div {

@@ -1,0 +1,27 @@
+{
+  "brand": "Next Australia",
+  "source_url": [
+    {
+      "url": "https://www.next.com.au/en",
+      "category_hint": "Fashion retailer. Women's clothing, footwear & accessories → Womens. Men's clothing & footwear → Menswear. Kids & baby clothing → Kids. Home products → Home. Storewide promotions → assign by product keywords."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [],
+  "screenshot_selectors": [],
+  "min_image_width": 300,
+  "min_image_height": 100,
+  "min_aspect_ratio": 1.0,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": false
+}

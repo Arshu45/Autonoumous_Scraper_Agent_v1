@@ -1,0 +1,38 @@
+{
+  "brand": "Tommy Hilfiger",
+  "source_url": [
+    {
+      "url": "https://au.tommy.com/promotions",
+      "category_hint": "Premium apparel, denim, and underwear -> Menswear or Womens depending on context."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    "div.mgz-element.mgz-element-text",
+    "div.mgz-element.mgz-child.mgz-element-text",
+    "div.mgz-element-inner.cogupbf-s",
+    "div.inner-content div[class*='mgz-element-text']"
+  ],
+  "screenshot_selectors": [
+    "div.inner-content",
+    "div.mgz-element.mgz-element-column",
+    "div.mgz-element-inner.cmrqkvx-s",
+    "div.mgz-element.mgz-child.mgz-element-text",
+    "div.mgz-element-inner.cogupbf-s"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

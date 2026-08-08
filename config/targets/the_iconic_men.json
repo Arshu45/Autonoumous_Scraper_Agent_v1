@@ -1,0 +1,24 @@
+{
+  "brand": "The Iconic Mens",
+  "source_url": [
+    {
+      "url": "https://www.theiconic.com.au/men/",
+      "category_hint": "Men's fashion, shoes, grooming, and accessories landing page on THE ICONIC -> Menswear. Always Menswear."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    "a[href*='campaign=lp-']"
+  ],
+  "screenshot_selectors": [
+    "div.c015:not(:has-text('Academy'))"
+  ],
+  "min_image_width": 300,
+  "min_image_height": 100,
+  "min_aspect_ratio": 0.8,
+  "request_delay_seconds": 4,
+  "scroll_depth": 2,
+  "enabled": true
+}
+ 

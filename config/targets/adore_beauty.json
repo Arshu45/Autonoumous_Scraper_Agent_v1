@@ -1,0 +1,48 @@
+{
+  "brand": "Adore Beauty",
+  "source_url": [
+    {
+      "url": "https://www.adorebeauty.com.au/",
+      "category_hint": "Australian online beauty retailer. Skincare, makeup, haircare, fragrance -> Beauty. Rewards and loyalty program info -> keep=false."
+    },
+    {
+      "url": "https://www.adorebeauty.com.au/c/specials/sale/clearance.html",
+      "category_hint": "Australian online beauty retailer. Skincare, makeup, haircare, fragrance -> Beauty. Rewards and loyalty program info -> keep=false."
+    },
+    {
+      "url": "https://www.adorebeauty.com.au/cms/adore-rewards.html",
+      "category_hint": "Australian online beauty retailer. Skincare, makeup, haircare, fragrance -> Beauty. Rewards and loyalty program info -> keep=false."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "category": "Beauty",
+  "text_selectors": [
+    ".marketing-banner-mobile",
+    "[class*='marketing-banner']",
+    "h5"
+  ],
+  "screenshot_selectors": [
+    "img[src*='ctfassets.net']",
+    "img[src*='pim_media']",
+    "img[alt*='Homepage Banner']",
+    "img[alt*='Banner']",
+    "img[alt*='category banner']",
+    ".marketing-banner-mobile"
+  ],
+  "min_image_width": 300,
+  "min_image_height": 100,
+  "min_aspect_ratio": 0.8,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo",
+    "payment-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

@@ -1,0 +1,43 @@
+{
+  "brand": "Clinique",
+  "source_url": [
+  {
+    "url": "https://www.clinique.com.au/",
+    "category_hint": "Dermatologist-developed beauty brand. All product promotions → Beauty. Loyalty program info → keep=false."
+  },
+  {
+    "url": "https://www.clinique.com.au/smartrewards",
+    "category_hint": "Dermatologist-developed beauty brand. All product promotions → Beauty. Loyalty program info → keep=false."
+  }
+],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "category": "Beauty",
+  "text_selectors": [
+    ".gnav-promo-banner__carousel-content-offer-text",
+    "#site-banner-text",
+    ".hero-full-width__content-text",
+    "a[href*='offers']",
+    "a[href*='sale']"
+  ],
+  "screenshot_selectors": [
+    ".gnav-promo-banner__carousel-item",
+    "[class*='hero-full-width']",
+    "[class*='hero'] img"
+  ],
+  "min_image_width": 300,
+  "min_image_height": 100,
+  "min_aspect_ratio": 0.8,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo",
+    "payment-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

@@ -1,0 +1,38 @@
+{
+  "brand": "Veronika Maine",
+  "source_url": [
+    {
+      "url": "https://www.veronikamaine.com.au/",
+      "category_hint": "Women's contemporary fashion brand. All clothing -> Womens. Always Womens."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    "h1",
+    "h2",
+    "[class*='hero'] h1",
+    "[class*='hero'] h2",
+    "[class*='banner'] h1",
+    "[class*='banner'] h2"
+  ],
+  "screenshot_selectors": [
+    "video",
+    "[class*='hero']",
+    "[class*='banner']"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

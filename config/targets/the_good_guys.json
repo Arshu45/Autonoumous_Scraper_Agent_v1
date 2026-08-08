@@ -1,0 +1,41 @@
+{
+  "brand": "The Good Guys",
+  "source_url": [
+    {
+      "url": "https://www.thegoodguys.com.au/",
+      "category_hint": "Consumer electronics & appliances retailer. All promotions → Entertainment. Never assign Home or Others."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    "[data-testid*='promo-product-tile']",
+    "[data-testid='promotile-ribbon']",
+    "[class*='_promoProductTile_']",
+    "[class*='_promoTileRibbon_']",
+    "[class*='_productName_']"
+  ],
+  "screenshot_selectors": [
+    "img[data-testid*='hero-promo-carousel-slide-image']",
+    "img[class*='_slideImage_']",
+    "img[src*='ctfassets.net']",
+    "[data-testid='dynamic-media-image'] img",
+    "[class*='_richNavAsset_'] img",
+    "section[data-testid*='promo-product-tile']"
+  ],
+  "min_image_width": 300,
+  "min_image_height": 150,
+  "min_aspect_ratio": 0.8,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo",
+    "payment-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

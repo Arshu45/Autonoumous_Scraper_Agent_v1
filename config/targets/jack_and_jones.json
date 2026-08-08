@@ -1,0 +1,27 @@
+{
+  "brand": "Jack & Jones",
+  "source_url": [
+    {
+      "url": "https://www.jackjones.com/en-us",
+      "category_hint": "Men's casual fashion and denim brand. Jeans, jackets, t-shirts -> Menswear."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [],
+  "screenshot_selectors": [],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": false
+}

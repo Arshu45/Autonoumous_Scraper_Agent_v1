@@ -1,0 +1,27 @@
+{
+  "brand": "Amazon Toys",
+  "source_url": [
+    {
+      "url": "https://www.amazon.com.au/toys-games/b/?node=4852617051",
+      "category_hint": "Amazon Toys category page. Toys, board games, action figures, puzzles -> Toys."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "screenshot",
+  "text_selectors": [],
+  "screenshot_selectors": [],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": false
+}

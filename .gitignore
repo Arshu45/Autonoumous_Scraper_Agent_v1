@@ -33,3 +33,6 @@ data/*.xml
 
 # Agent Screenshots
 agent_screenshots/
+
+# Scraper run logs (timestamped per run — do not commit)
+logs/*.log

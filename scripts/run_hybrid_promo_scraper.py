@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.connection import get_session
 from database.models import Competitor, Promotion
 from promo_scraper.hybrid_promo_extractor import HybridPromoExtractor
+from services.team_policy_engine import TeamPolicyEngine
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,6 +39,9 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("hybrid_promo_scraper")
+policy_engine = TeamPolicyEngine()
+
+from scripts.logging_setup import attach_file_logger, detach_file_logger
 
 
 # ── Load Target registry from config ──────────────────────────────────────────
@@ -107,10 +111,11 @@ def _load_filesystem_targets() -> list[dict]:
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
 
-def _make_offer_hash(source: str, brand: str, title: str, source_url: str | None = None) -> str:
+def _make_offer_hash(source: str, brand: str, title: str, source_url: str | None = None, date_str: str = "") -> str:
     source_part = source_url or ""
-    raw = f"{source}|{brand}|{source_part}|{title}".lower().strip()
+    raw = f"{source}|{brand}|{source_part}|{title}|{date_str}".lower().strip()
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
 
 
 def _make_legacy_offer_hash(source: str, brand: str, title: str) -> str:
@@ -142,38 +147,68 @@ def _save_offer_items(offer_dicts: list[dict], session) -> tuple[int, int]:
         session.flush()   # get competitor.id without a full commit
         logger.info("Auto-created competitor '%s' in DB", brand_name)
 
+    scraped_date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # Pre-compute all hashes so we can batch-fetch existing promotions in
+    # a single query instead of 2 SELECTs per item (N+1 → 1).
+    item_hashes = []
     for item in offer_dicts:
         source_url = item.get("source_url")
-        offer_hash = _make_offer_hash(item["source"], brand_name, item["title"], source_url)
-        existing = session.query(Promotion).filter_by(offer_hash=offer_hash).first()
+        new_hash = _make_offer_hash(item["source"], brand_name, item["title"], source_url, scraped_date_str)
+        legacy_hash = _make_legacy_offer_hash(item["source"], brand_name, item["title"])
+        item_hashes.append((new_hash, legacy_hash, source_url))
+
+    all_hashes = set()
+    for new_h, legacy_h, _ in item_hashes:
+        all_hashes.add(new_h)
+        all_hashes.add(legacy_h)
+
+    # Single query: fetch all promotions whose offer_hash matches any of our hashes.
+    existing_promos = (
+        session.query(Promotion)
+        .filter(Promotion.offer_hash.in_(all_hashes))
+        .all()
+    )
+    promo_by_hash = {p.offer_hash: p for p in existing_promos}
+
+    for item, (offer_hash, legacy_hash, source_url) in zip(offer_dicts, item_hashes):
+        existing = promo_by_hash.get(offer_hash)
         if not existing:
-            legacy_hash = _make_legacy_offer_hash(item["source"], brand_name, item["title"])
-            legacy = session.query(Promotion).filter_by(offer_hash=legacy_hash).first()
+            legacy = promo_by_hash.get(legacy_hash)
             if legacy and legacy.source_url == source_url:
                 existing = legacy
                 existing.offer_hash = offer_hash
 
+        cat = item.get("category") or "Others"
         if existing:
+            existing.offer_title           = item["title"]
             existing.scraped_at            = datetime.now(timezone.utc)
             existing.extraction_confidence = item.get("confidence")
-            existing.category              = item.get("category")
+            existing.category              = cat
             updated += 1
+            promo_obj = existing
         else:
-            session.add(Promotion(
+            promo_obj = Promotion(
                 competitor_id         = competitor.id,
                 brand                 = brand_name,
                 offer_title           = item["title"],
-                category              = item.get("category"),
+                category              = cat,
                 source_name           = item["source"],
                 source_url            = item.get("source_url"),
                 extraction_confidence = item.get("confidence"),
                 offer_hash            = offer_hash,
                 scraped_at            = datetime.now(timezone.utc),
                 created_at            = datetime.now(timezone.utc),
-            ))
+            )
+            session.add(promo_obj)
+            session.flush()
             inserted += 1
+        
+        # Sync team assignment rules
+        policy_engine.sync_promotion_assignments(session, promo_obj)
 
-    # Single commit for the entire brand batch
+    # Single commit for the entire brand batch — re-raise on failure
+    # so the caller knows no data was persisted.
     try:
         session.commit()
     except Exception as e:
@@ -182,6 +217,7 @@ def _save_offer_items(offer_dicts: list[dict], session) -> tuple[int, int]:
             "Batch DB commit failed for brand '%s' (%d offers): %s",
             brand_name, len(offer_dicts), e,
         )
+        raise
 
     return inserted, updated
 
@@ -206,7 +242,11 @@ def scrape_single_target(target: dict) -> dict:
         items     = summary.pop("offer_items", [])
 
         if items:
-            inserted, updated = _save_offer_items(items, session)
+            try:
+                inserted, updated = _save_offer_items(items, session)
+            except Exception as db_err:
+                logger.error("%s — DB save failed, 0 offers stored: %s", brand, db_err)
+                inserted = updated = 0
             summary["offers_stored"] = inserted + updated
             logger.info(
                 "%s — Inserted: %d  |  Updated: %d  |  Cost: $%.6f",
@@ -219,9 +259,11 @@ def scrape_single_target(target: dict) -> dict:
         return summary
 
     except EnvironmentError as e:
+        session.rollback()
         logger.critical(str(e))
         raise
     except Exception as e:
+        session.rollback()
         logger.error("Failed to process '%s': %s", brand, e, exc_info=True)
         return {"brand": brand, "error": str(e)}
     finally:
@@ -234,10 +276,16 @@ def run_hybrid_promo_scraper(target_path: str | None = None) -> list[dict]:
     """
     Runs all targets SEQUENTIALLY when called directly (python scripts/run_...).
     For concurrent execution, use the Prefect flow in flows/master_pipeline.py.
+    Each run writes a timestamped log file to logs/.
     """
-    targets = load_targets(target_path)
-    all_summaries = [scrape_single_target(t) for t in targets]
-    _print_summary(all_summaries)
+    file_handler = attach_file_logger(source="cli")
+    try:
+        targets = load_targets(target_path)
+        all_summaries = [scrape_single_target(t) for t in targets]
+        _print_summary(all_summaries)
+    finally:
+        log_path = detach_file_logger(file_handler)
+        logger.info("📄 Full log saved → %s", log_path)
     return all_summaries
 
 

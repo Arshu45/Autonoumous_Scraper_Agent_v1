@@ -1,0 +1,39 @@
+{
+  "brand": "ASOS",
+  "source_url": [
+    {
+      "url": "https://www.asos.com/au/women/",
+      "category_hint": "ASOS women's department page. Clothing, dresses -> Womens. Shoes -> Footwear."
+    },
+    {
+      "url": "https://www.asos.com/au/men/",
+      "category_hint": "ASOS men's department page. Clothing, shirts, jackets -> Menswear. Shoes -> Footwear."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    ".flexible-banner",
+    ".flexible-banner__content",
+    "div[role='region'][aria-label='Flexible Banner']"
+  ],
+  "screenshot_selectors": [
+    "a.hero__link img.hero__image",
+    ".flexible-banner",
+    "div[role='region'][aria-label='Flexible Banner']"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

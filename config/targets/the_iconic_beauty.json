@@ -1,0 +1,43 @@
+{
+  "brand": "The Iconic Beauty",
+  "source_url": [
+    {
+      "url": "https://www.theiconic.com.au/discover-beauty-wellness/",
+      "category_hint": "Beauty and wellness landing page on THE ICONIC. All skincare, makeup, fragrance, hair care, and wellness offers -> Beauty. Always Beauty."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    "div.undefined",
+    "h2[class*='c01']",
+    "p[class*='c01']"
+  ],
+  "screenshot_selectors": [
+    "img.applyHeight",
+    ".applyHeight",
+    "[class*='applyHeight']",
+    "div.dm-sale",
+    "div.row.discover-more",
+    "section.discover-more-content",
+    "[class*='Hero']",
+    "[class*='hero']",
+    "[class*='Banner']",
+    "[class*='banner']",
+    "[class*='Editorial']",
+    "[class*='editorial']",
+    "[class*='Promo']",
+    "[class*='promo']",
+    "[class*='Campaign']",
+    "div.c015",
+    "div.c01238",
+    "div.c01241"
+  ],
+  "min_image_width": 300,
+  "min_image_height": 50,
+  "min_aspect_ratio": 0.5,
+  "request_delay_seconds": 4,
+  "scroll_depth": 2,
+  "enabled": true,
+  "promo_keywords_pattern": "\\d+\\s*%|\\boff\\b|\\bsale\\b|\\bdeal\\b|\\bsave\\b|\\bdiscount\\b|\\bextra\\b|\\bfree\\b|clearance|\\boffer\\b|\\bpromo(?:tion)?\\b|\\bcode\\b|\\bcoupon\\b|\\bvoucher\\b|\\bbogo\\b|buy\\s*\\d+\\s*get\\s*\\d+|\\b\\d+\\s*for\\s*\\d+\\b|\\bmembers?\\b.{0,15}\\b(save|only|exclusive|price|pricing)\\b|\\bfor\\s+[A-Za-z]{0,3}[\\$\u00a3\u20ac\u00a5\u20b9]\\d|\\bfrom\\s+[A-Za-z]{0,3}[\\$\u00a3\u20ac\u00a5\u20b9]\\d|\\bonly\\s+[A-Za-z]{0,3}[\\$\u00a3\u20ac\u00a5\u20b9]\\d|[\\$\u00a3\u20ac\u00a5\u20b9]\\d+\\s*\\*|[\\$\u00a3\u20ac\u00a5\u20b9]\\d+\\s*each"
+}

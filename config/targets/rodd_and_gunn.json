@@ -1,0 +1,30 @@
+{
+  "brand": "Rodd & Gunn",
+  "source_url": [
+    {
+      "url": "https://www.roddandgunn.com/au",
+      "category_hint": "Men's heritage clothing brand. Polos, jackets, shirts, pants -> Menswear. Always Menswear."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "text",
+  "text_selectors": [
+    ".text-overlay2",
+    ".mainHP-heading3"
+  ],
+  "screenshot_selectors": [],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

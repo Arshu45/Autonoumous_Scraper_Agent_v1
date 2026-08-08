@@ -1,0 +1,62 @@
+{
+  "brand": "Ben Sherman",
+  "source_url": [
+    {
+      "url": "https://www.bensherman.com.au/",
+      "category_hint": "Men's fashion retailer. All promotions → Menswear."
+    },
+    {
+      "url": "https://www.bensherman.com.au/collections/2-for-79-tees",
+      "category_hint": "Men's apparel promotion. All promotions → Menswear."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    ".announcement-bar",
+    ".announcement-bar__text",
+    ".header-notification",
+    ".utility-bar",
+    ".promo-bar",
+    ".top-bar",
+    ".site-header__notification",
+    "[data-announcement-bar]",
+    ".banner__text",
+    ".hero__text",
+    ".hero__title",
+    ".image-overlay__text",
+    ".image-overlay__image-link",
+    ".gallery__item a[href*='/collections/']",
+    ".collection-hero__title",
+    ".page-header h1",
+    "h1",
+    "h2",
+    "h3"
+  ],
+  "screenshot_selectors": [
+    "img[src*='offer-banner']",
+    "img[src*='shirts-offer']",
+    "img[src*='tees-offer']",
+    "img[src*='2-for-79']",
+    ".gallery__image img",
+    ".image-overlay__image img",
+    "img[src*='promo']",
+    "img[src*='banner']",
+    ".gallery__item.image-overlay"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 300,
+  "min_aspect_ratio": 0.5,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "nav_retry_attempts": 4,
+  "request_delay_seconds": 6,
+  "scroll_depth": 3,
+  "enabled": true
+}

@@ -21,6 +21,14 @@ def ensure_schema_columns():
     statements = [
         "ALTER TABLE promotions ADD COLUMN IF NOT EXISTS category VARCHAR(100)",
         "ALTER TABLE promotions DROP COLUMN IF EXISTS raw_text",
+        """
+        CREATE TABLE IF NOT EXISTS promotion_team_assignments (
+            id SERIAL PRIMARY KEY,
+            promotion_id INTEGER NOT NULL REFERENCES promotions(id) ON DELETE CASCADE,
+            team_id VARCHAR(50) NOT NULL,
+            assigned_at TIMESTAMP WITHOUT TIME ZONE DEFAULT (now() AT TIME ZONE 'utc') NOT NULL
+        )
+        """
     ]
     with engine.begin() as conn:
         for statement in statements:
@@ -44,7 +52,7 @@ def main():
     try:
         init_db()
         ensure_schema_columns()
-        print("   ✓ All tables ('competitors', 'promotions') initialized successfully.")
+        print("   ✓ All tables ('competitors', 'promotions', 'promotion_team_assignments') initialized successfully.")
         print("\n✅ Database is ready!")
         print("\n👉 Next steps:")
         print("   1. python flows/master_pipeline.py  ← run all scrapers")

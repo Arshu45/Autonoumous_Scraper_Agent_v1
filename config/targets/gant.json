@@ -1,0 +1,25 @@
+{
+  "brand": "Gant",
+  "source_url": [
+    {
+      "url": "https://gant.com.au/",
+      "category_hint": "Premium menswear and womenswear fashion brand. Shirts, polos, and multi-buy clothing deals (e.g. 'Shirts 2 for $269') -> Menswear or Womens. Newsletter/club signup offers and loyalty join incentives -> keep=false. Never assign Others for a clothing deal."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "text",
+  "text_selectors": [
+    "div:has(> button[data-drawer-target='newsletterPanel']) p",
+    "div:has(> [id*='__eyebrow_'])"
+  ],
+  "screenshot_selectors": [],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo", "/icon", "/avatar", "social", "payment", "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

@@ -1,0 +1,44 @@
+{
+  "brand": "Berlei",
+  "source_url": [
+    {
+      "url": "https://www.berlei.com.au/",
+      "category_hint": "Women's bras, sports bras, and underwear -> Womens. Always assign Womens for this brand."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    "p.grid-copy",
+    "ul.utils-list",
+    ".utils-list li",
+    ".utils-heading",
+    "[class*='banner'] h1",
+    "[class*='banner'] h2",
+    "[class*='banner'] p",
+    "[class*='hero'] h1",
+    "[class*='hero'] h2",
+    "img.img-desktop"
+  ],
+  "screenshot_selectors": [
+    "img.img-desktop",
+    "img[src*='homepage']",
+    "img[src*='Banner']",
+    "[class*='homepage-banner']"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo",
+    "payment-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": false
+}

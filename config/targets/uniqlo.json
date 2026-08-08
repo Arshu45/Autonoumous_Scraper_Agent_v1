@@ -1,0 +1,27 @@
+{
+  "brand": "Uniqlo",
+  "source_url": [
+    {
+      "url": "https://www.uniqlo.com/au/en/",
+      "category_hint": "Everyday apparel. Men's clothing -> Menswear. Women's clothing -> Womens. Kids clothing -> Kids."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [],
+  "screenshot_selectors": [],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": false
+}

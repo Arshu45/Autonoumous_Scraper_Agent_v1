@@ -1,0 +1,24 @@
+{
+  "brand": "Van Heusen",
+  "source_url": "https://www.vanheusen.com.au/",
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    ".mgz-content-carouse-slide"
+  ],
+  "screenshot_selectors": [
+    ".mgz-content-carouse-slide img",
+    "img[src*='banner']",
+    "img[src*='promo']"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo", "/icon", "/avatar", "social", "payment", "brand-logo"
+  ],
+  "promo_keywords_pattern": "\\d+\\s*%|\\boff\\b|\\b\\d+\\s*for\\s*[\\$£€¥₹]?\\d+|buy\\s*\\d+[,\\s]*get\\s*\\d+|\\bsave\\b|\\bdiscount\\b",
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

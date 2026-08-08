@@ -1,82 +1,36 @@
 {
   "brand": "American Eagle",
-  "source_url": "https://americaneagle.com.au/",
+  "source_url": [
+    {
+      "url": "https://americaneagle.com.au/",
+      "category_hint": "Casual denim & apparel retailer. Women's products → Womens. Men's products → Menswear. If the promotion does not explicitly indicate gender, default to Menswear."
+    }
+  ],
   "spider": "image_promo",
   "extraction_strategy": "hybrid",
   "text_selectors": [
+    ".group-block-content",
     ".ann-slide__text",
-    ".ann-slide__text p",
-    ".cb-headline",
-    ".cb-section",
-    "[class*='promo']",
-    "[class*='banner']",
-    "[class*='sale']",
-    "[class*='discount']",
-    "[class*='offer']",
-    ".announcement-bar",
-    "#announcement-bar",
-    ".countdown-banner-section",
-    ".cb-inner",
-    ".mega-menu__nav-link--clearance",
-    "[aria-label*='FINAL']",
-    "[aria-label*='SALE']",
-    "[aria-label*='Off']",
-    "h2[class*='headline']",
-    "[class*='tile']",
-    "[class*='card']",
-    "[class*='cta']",
-    "p[class*='promo']",
-    "span[class*='discount']",
-    "div[class*='offer-text']"
+    ".ann-slide__text p"
   ],
   "screenshot_selectors": [
-    ".announcement-bar",
-    "#announcement-bar",
-    ".countdown-banner-section",
-    "#shopify-section-sections--18830095188029__countdown_banner_YFGyhA",
-    "#shopify-section-sections--18830095188029__announcement-bar",
-    ".cb-section",
-    ".ann-track",
-    ".ann-slide",
-    "[class*='hero']",
-    "[class*='banner-section']",
-    "[class*='promo-section']",
-    "[id*='countdown']",
-    "[id*='announcement']",
-    ".shopify-section-group-announcement-group",
-    "[class*='tile-section']",
-    "[class*='promotional-tile']",
-    "[class*='campaign-section']",
-    "section[class*='promo']",
-    "div[class*='hero-content']"
+    ".ai-hero-banner",
+    ".background-image-container",
+    "[class*='hero-banner']",
+    "[class*='group-block__media']"
   ],
-  "min_image_width": 400,
-  "min_image_height": 150,
-  "min_aspect_ratio": 1.2,
+  "min_image_width": 200,
+  "min_image_height": 100,
+  "min_aspect_ratio": 1.0,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
   "request_delay_seconds": 4,
   "scroll_depth": 3,
-  "enabled": true,
-  "extraction_notes": {
-    "risks": [
-      "Medium anti-bot risk detected; implement appropriate delays and user-agent rotation",
-      "Announcement bar uses rotating slides; may require multiple page loads or JavaScript execution to capture all variations",
-      "Mid-section promotional tiles (New Arrivals, Denim, Men's Underwear, etc.) not present in provided DOM; full page crawl required",
-      "Footer email signup offer may require scrolling to bottom of page",
-      "Countdown timer content is dynamic; screenshot timing critical for accurate capture"
-    ],
-    "edge_cases": [
-      "Rotating announcement slides may cycle; consider capturing multiple screenshots at intervals",
-      "Promo codes embedded in text overlays on images; Vision API analysis recommended for image-based promotions",
-      "Category-specific offers (New Arrivals, Denim, Men's Underwear) require full DOM inspection once available",
-      "Shopify section IDs are specific to this instance; may change on site updates",
-      "Text selectors using attribute matching ([class*='...']) provide resilience but may capture non-promotional content"
-    ],
-    "recommendations": [
-      "Enable JavaScript execution to capture dynamically rendered promotional content",
-      "Use Vision API for image-based promotional tiles to extract overlay text",
-      "Implement retry logic for countdown banner captures to ensure timer visibility",
-      "Validate extracted promo codes (e.g., FINAL15) against known patterns",
-      "Monitor for changes to Shopify section structure and update selectors accordingly"
-    ]
-  }
+  "enabled": true
 }

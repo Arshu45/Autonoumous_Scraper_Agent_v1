@@ -1,0 +1,24 @@
+{
+  "brand": "Calvin Klein",
+  "source_url": [
+    {
+      "url": "https://www.calvinklein.com.au/",
+      "category_hint": "Premium fashion brand selling underwear, basics, and apparel for men and women. Multi-buy promotions (e.g. 'Buy 2 Or More & Save 30%') -> Menswear or Womens depending on product context. Never Others for clothing or underwear deals."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "text",
+  "text_selectors": [
+    ".full_width_row_content_no_paddings .mgz-element-text:first-of-type p"
+  ],
+  "screenshot_selectors": [],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo", "/icon", "/avatar", "social", "payment", "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

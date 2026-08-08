@@ -1,0 +1,27 @@
+{
+  "brand": "Country Road",
+  "source_url": [
+    {
+      "url": "https://www.countryroad.com.au/",
+      "category_hint": "Australian lifestyle brand. Women's apparel -> Womens. Men's apparel -> Menswear. Children's -> Kids. Homewares -> Home."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [],
+  "screenshot_selectors": [],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": false
+}

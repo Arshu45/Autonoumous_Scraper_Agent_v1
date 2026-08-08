@@ -1,0 +1,25 @@
+{
+  "brand": "Kmart",
+  "source_url": {
+    "url": "https://www.kmart.com.au/",
+    "category_hint": "Australian discount department store chain. Kids clothing and schoolwear -> Kids. Toys and games -> Toys. Homewares and furniture -> Home. Clearance promotions mentioning 'Clothing, Footwear and Home' or 'Clearance' -> use the most specific product keyword from promo text. Never Others for clothing or homewares. Always Kids, Toys, or Home."
+  },
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [],
+  "screenshot_selectors": [],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": false
+}

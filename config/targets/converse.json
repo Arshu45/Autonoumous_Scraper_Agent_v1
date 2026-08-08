@@ -1,0 +1,31 @@
+{
+  "brand": "Converse",
+  "source_url": [
+    {
+      "url": "https://www.converse.com.au/spend-save",
+      "category_hint": "Footwear-only brand. ALL promotions (spend and save, percentage off, bundle deals) -> Footwear. Do not assign Others or Menswear or Womens. Standalone free delivery notices -> keep=false."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    "div[data-testid='bannerRotator-banner-content'] div[data-content-type='html']:first-of-type strong"
+  ],
+  "screenshot_selectors": [
+    "div[data-testid='bannerRotator-banner-content']"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

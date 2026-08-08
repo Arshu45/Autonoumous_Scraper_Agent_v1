@@ -7,6 +7,7 @@ alembic==1.18.4                 # DB schema migrations
 prefect==3.6.27                 # Pipeline scheduling & monitoring
 langgraph==0.2.62               # Agent workflow orchestration
 docker==7.1.0                   # Python Docker SDK — for sandboxed execution
+fastapi==0.115.14               # Pinned: newer fastapi/starlette breaks Prefect's embedded server routing
 
 # ── Image-Based Promo Scraper ──────────────────────
 playwright==1.58.0              # Headless browser automation
@@ -14,11 +15,14 @@ google-genai==2.10.0            # Gemini 2.0 Flash Vision API (new SDK)
 litellm==1.83.14                  # Multi-provider LLM client for corporate paid gateways
 pillow==12.2.0                   # Image resizing before API upload
 tenacity==9.1.4                 # Exponential backoff for API retries
+curl_cffi==0.16.0           # TLS Client Hello browser impersonation for anti-bot bypass
 
 # ── Dashboard (Streamlit) ──────────────────────────
 streamlit==1.57.0
 pandas==3.0.2
 plotly==6.7.0
+# pyarrow==17.0.0   # pinned: 25.x causes SIGSEGV on macOS arm64 (Apple Silicon) with NumPy 2.x; 17.0 is the first release with NumPy 2 wheel support
+# altair==5.3.0     # pinned: streamlit 1.57 explicitly blocks altair 5.4.0 and 5.4.1; altair 6.x has not been validated
 
 # ── Utilities ──────────────────────────────────────
 python-dotenv==1.2.2           # Load .env configuration

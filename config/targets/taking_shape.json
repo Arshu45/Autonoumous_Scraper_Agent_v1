@@ -1,0 +1,35 @@
+{
+  "brand": "Taking Shape",
+  "source_url": [
+    {
+      "url": "https://takingshape.com/AU/",
+      "category_hint": "Plus-size women's fashion brand. All clothing -> Womens. Always Womens."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    "#PromoStrip-SaleClearance",
+    ".ITC-text-underneath",
+    ".campaign-banner-message"
+  ],
+  "screenshot_selectors": [
+    ".ITC-image",
+    "#PromoStrip-SaleClearance",
+    ".campaign-banner"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true
+}

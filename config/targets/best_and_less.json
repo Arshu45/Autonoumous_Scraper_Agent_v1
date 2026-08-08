@@ -1,0 +1,35 @@
+{
+  "brand": "Best & Less",
+  "source_url": [
+    {
+      "url": "https://www.bestandless.com.au/",
+      "category_hint": "Value family retailer specializing in Kids apparel, babywear, and Toys. Kids and baby clothing -> Kids. Toys and games -> Toys. Storewide or ambiguous sales -> others"
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    "p.mb-0",
+    ".shop-now-outline",
+    "app-price-text-image-tile-list a"
+  ],
+  "screenshot_selectors": [
+    "app-price-text-image-tile-list .image-container img",
+    ".image-container-single .image-contain"
+  ],
+  "min_image_width": 200,
+  "min_image_height": 150,
+  "min_aspect_ratio": 0.5,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 6,
+  "scroll_depth": 8,
+  "enabled": true,
+  "promo_keywords_pattern": "\\d+\\s*%|\\boff\\b|\\bsale\\b|\\bdeal\\b|\\bsave\\b|\\bdiscount\\b|\\bextra\\b|free\\s+(?:[a-zA-Z]+\\s+)?(?:delivery|shipping|gift|returns?)|clearance|\\boffer\\b|\\bpromo(?:tion)?\\b|\\bcode\\b|\\bcoupon\\b|\\bvoucher\\b|\\bbogo\\b|buy\\s*\\d+\\s*get\\s*\\d+|\\b\\d+\\s*for\\s*\\d+\\b|\\bmembers?\\b.{0,15}\\b(save|only|exclusive|price|pricing)\\b|\\bfor\\s+[A-Za-z]{0,3}[\\$\u00a3\u20ac\u00a5\u20b9]\\d|\\bfrom\\s+[A-Za-z]{0,3}[\\$\u00a3\u20ac\u00a5\u20b9]\\d|\\bonly\\s+[A-Za-z]{0,3}[\\$\u00a3\u20ac\u00a5\u20b9]\\d|[\\$\u00a3\u20ac\u00a5\u20b9]\\d+\\s*\\*|[\\$\u00a3\u20ac\u00a5\u20b9]\\d+\\s*each"
+}

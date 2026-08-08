@@ -14,7 +14,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.connection import get_session
-from database.models import Promotion, Competitor
+from database.models import Promotion, Competitor, PromotionTeamAssignment
 
 
 def reset_all_tables(session):
@@ -22,8 +22,9 @@ def reset_all_tables(session):
 
     # Order matters — delete child tables before parents (foreign key constraints)
     counts = {
-        'promotions':        session.query(Promotion).delete(),
-        'competitors':       session.query(Competitor).delete(),
+        'promotion_team_assignments': session.query(PromotionTeamAssignment).delete(),
+        'promotions':                 session.query(Promotion).delete(),
+        'competitors':                session.query(Competitor).delete(),
     }
     session.commit()
 

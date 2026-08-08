@@ -1,0 +1,41 @@
+{
+  "brand": "Bobbi Brown",
+  "source_url": [
+    {
+      "url": "https://www.bobbibrown.com.au/",
+      "category_hint": "Cosmetics, makeup, and skincare products -> Beauty. Always Beauty."
+    },
+    {
+      "url": "https://www.bobbibrown.com.au/last-chance",
+      "category_hint": "Cosmetics, makeup, and skincare products -> Beauty. Always Beauty."
+    },
+    {
+      "url": "https://www.bobbibrown.com.au/offers",
+      "category_hint": "Cosmetics, makeup, and skincare products -> Beauty. Always Beauty."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "text",
+  "category": "Beauty",
+  "text_selectors": [
+    ".content-over-media__text",
+    ".content-block--mpp-header .content-block__line--content",
+    ".content-block--basic-tout .content-block__line--content .bold"
+  ],
+  "screenshot_selectors": [],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true,
+  "promo_keywords_pattern": "\\d+\\s*%|\\boff\\b|\\bsale\\b|\\bdeal\\b|\\bsave\\b|\\bdiscount\\b|\\bextra\\b|free\\s+(?:[a-zA-Z]+\\s+)?(?:delivery|shipping|gift|returns?)|clearance|\\boffer\\b|\\bpromo(?:tion)?\\b|\\bcode\\b|\\bcoupon\\b|\\bvoucher\\b|\\bbogo\\b|buy\\s*\\d+\\s*get\\s*\\d+|\\b\\d+\\s*for\\s*\\d+\\b|\\bmembers?\\b.{0,15}\\b(save|only|exclusive|price|pricing)\\b|\\bfor\\s+[A-Za-z]{0,3}[\\$\u00a3\u20ac\u00a5\u20b9]\\d|\\bfrom\\s+[A-Za-z]{0,3}[\\$\u00a3\u20ac\u00a5\u20b9]\\d|\\bonly\\s+[A-Za-z]{0,3}[\\$\u00a3\u20ac\u00a5\u20b9]\\d|[\\$\u00a3\u20ac\u00a5\u20b9]\\d+\\s*\\*|[\\$\u00a3\u20ac\u00a5\u20b9]\\d+\\s*each|\\bwith\\s+[\\$\u00a3\u20ac\u00a5\u20b9]\\d+\\+?\\s*orders?\\b|\\bfree\\b.{0,20}\\bwith\\b"
+}

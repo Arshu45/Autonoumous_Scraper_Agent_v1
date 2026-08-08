@@ -1,0 +1,27 @@
+{
+  "brand": "Giorgio Armani",
+  "source_url": [
+    {
+      "url": "https://www.armani.com/en-au/giorgio-armani/experience/",
+      "category_hint": "Luxury beauty, cosmetics, and fragrance -> Beauty."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [],
+  "screenshot_selectors": [],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "exclude_url_patterns": [
+    "/logo",
+    "/icon",
+    "/avatar",
+    "social",
+    "payment",
+    "brand-logo"
+  ],
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": false
+}

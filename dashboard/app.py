@@ -178,7 +178,7 @@ else:
             data=excel_data,
             file_name=f"weekly_matrix_{datetime.date.today()}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            width="stretch"
         )
     st.markdown('<div style="margin-top: 1rem;"></div>', unsafe_allow_html=True)
 

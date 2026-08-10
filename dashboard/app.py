@@ -77,8 +77,9 @@ st.sidebar.markdown("""
 
 st.sidebar.markdown('<div class="section-label">Filters</div>', unsafe_allow_html=True)
 
-# Fetch promotions DataFrame
-df = get_promotions()
+# Work on a local copy — cache_data returns a copy per-call, but being explicit
+# here protects against future decorator changes and makes intent clear.
+df = get_promotions().copy()
 
 if df.empty:
     page_header("Promotional Intelligence", "Real-time competitor promotion monitoring.")

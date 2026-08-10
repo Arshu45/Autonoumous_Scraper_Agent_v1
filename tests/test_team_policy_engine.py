@@ -22,9 +22,15 @@ class TestTeamPolicyEngine(unittest.TestCase):
         cls.engine = TeamPolicyEngine()
 
     def setUp(self):
+        # get_session() uses autocommit=False, so every session starts in a
+        # transaction automatically. As long as we never call commit() inside
+        # a test, tearDown's rollback() will undo ALL writes made during that
+        # test — keeping the real database clean.
         self.session = get_session()
 
     def tearDown(self):
+        # Roll back the entire test transaction so no data leaks into the DB.
+        # This is only effective as long as tests use flush() instead of commit().
         self.session.rollback()
         self.session.close()
 
@@ -88,6 +94,10 @@ class TestTeamPolicyEngine(unittest.TestCase):
     def test_db_sync_promotion_assignments(self):
         """
         Test end-to-end database synchronization of promotion team assignments.
+
+        Uses flush() instead of commit() so all writes remain inside an open
+        transaction that tearDown can roll back — no orphaned rows are left in
+        the real database after this test completes.
         """
         # 1. Ensure competitor exists
         competitor = self.session.query(Competitor).filter_by(name="BIG W").first()
@@ -113,7 +123,10 @@ class TestTeamPolicyEngine(unittest.TestCase):
 
         # 3. Sync team assignments
         assigned = self.engine.sync_promotion_assignments(self.session, promo)
-        self.session.commit()
+        # flush() instead of commit(): sends SQL to the DB engine so the
+        # junction rows are visible to the query below, but keeps the
+        # transaction open so tearDown's rollback() cleans everything up.
+        self.session.flush()
 
         # 4. Verify junction table entries
         db_assignments = self.session.query(PromotionTeamAssignment).filter_by(promotion_id=promo.id).all()

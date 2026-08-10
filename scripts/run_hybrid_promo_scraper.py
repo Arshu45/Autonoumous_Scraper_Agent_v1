@@ -41,7 +41,7 @@ logging.basicConfig(
 logger = logging.getLogger("hybrid_promo_scraper")
 policy_engine = TeamPolicyEngine()
 
-from scripts.logging_setup import attach_file_logger, detach_file_logger
+from scripts.logging_setup import scoped_file_logger
 
 
 # ── Load Target registry from config ──────────────────────────────────────────
@@ -278,13 +278,10 @@ def run_hybrid_promo_scraper(target_path: str | None = None) -> list[dict]:
     For concurrent execution, use the Prefect flow in flows/master_pipeline.py.
     Each run writes a timestamped log file to logs/.
     """
-    file_handler = attach_file_logger(source="cli")
-    try:
+    with scoped_file_logger(source="cli") as log_path:
         targets = load_targets(target_path)
         all_summaries = [scrape_single_target(t) for t in targets]
         _print_summary(all_summaries)
-    finally:
-        log_path = detach_file_logger(file_handler)
         logger.info("📄 Full log saved → %s", log_path)
     return all_summaries
 

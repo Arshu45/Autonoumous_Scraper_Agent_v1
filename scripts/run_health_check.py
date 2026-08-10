@@ -92,27 +92,39 @@ def _get_enabled_targets(session) -> list[Any]:
     )
 
 
-def _get_recent_outcomes(session, brand: str, n: int = RECENT_RUN_LOOKBACK) -> list[Any]:
+def _get_recent_outcomes_batch(session, brands: list[str], n: int = RECENT_RUN_LOOKBACK) -> dict[str, list[Any]]:
     """
-    Return the most recent `n` `initial_validation` or `health_check` outcome rows
-    for `brand`, ordered newest-first.
-
-    We include both run_types so that re-validations triggered by the operator
-    workspace (initial_validation from re-approval) are also counted against the
-    target's health — not just previous health_check rows.
+    Bulk-fetch recent `initial_validation` or `health_check` outcome rows for all `brands`
+    in a single database query, grouped newest-first up to `n` rows per brand.
     """
     from database.models import AgentRunOutcome
     from sqlalchemy import desc
-    return (
+
+    if not brands:
+        return {}
+
+    rows = (
         session.query(AgentRunOutcome)
         .filter(
-            AgentRunOutcome.brand == brand,
+            AgentRunOutcome.brand.in_(brands),
             AgentRunOutcome.run_type.in_(["initial_validation", "health_check"]),
         )
-        .order_by(desc(AgentRunOutcome.checked_at))
-        .limit(n)
+        .order_by(AgentRunOutcome.brand, desc(AgentRunOutcome.checked_at))
         .all()
     )
+
+    outcomes_by_brand: dict[str, list[Any]] = {b: [] for b in brands}
+    for row in rows:
+        if row.brand in outcomes_by_brand and len(outcomes_by_brand[row.brand]) < n:
+            outcomes_by_brand[row.brand].append(row)
+
+    return outcomes_by_brand
+
+
+def _get_recent_outcomes(session, brand: str, n: int = RECENT_RUN_LOOKBACK) -> list[Any]:
+    """Single brand fallback helper."""
+    res = _get_recent_outcomes_batch(session, [brand], n)
+    return res.get(brand, [])
 
 
 def _days_since(dt: datetime | None) -> int | None:
@@ -231,13 +243,10 @@ def _log_health_check_outcome(
     brand: str,
     health_result: dict[str, Any],
     days_since_registration: int | None,
+    commit: bool = True,
 ) -> None:
     """
     Insert a new row into `agent_run_outcomes` with run_type='health_check'.
-
-    This is the authoritative signal that the health-check agent ran and
-    produced a verdict. The `still_healthy_at_check` column is the primary
-    field read by the operator workspace's monitoring tab (future Task 8+).
     """
     from database.models import AgentRunOutcome
 
@@ -248,7 +257,6 @@ def _log_health_check_outcome(
         "runs_inspected": health_result.get("runs_inspected", 0),
         "days_since_registration": days_since_registration,
     }
-    # Attach any extra fields the analyser produced (e.g. avg_schema_valid_pct, note)
     for extra_key in ("avg_schema_valid_pct", "note"):
         if extra_key in health_result:
             breakdown[extra_key] = health_result[extra_key]
@@ -256,16 +264,17 @@ def _log_health_check_outcome(
     row = AgentRunOutcome(
         brand=brand,
         run_type="health_check",
-        confidence_score=None,        # not re-scored during health check
+        confidence_score=None,
         score_breakdown=breakdown,
-        recommendation=None,          # health check does not produce a routing recommendation
+        recommendation=None,
         offers_extracted=None,
         was_auto_approved=None,
         days_since_registration=days_since_registration,
         still_healthy_at_check=health_result["still_healthy"],
     )
     session.add(row)
-    session.commit()
+    if commit:
+        session.commit()
     logger.debug(
         "Logged health_check outcome for '%s': still_healthy=%s",
         brand, health_result["still_healthy"],
@@ -277,16 +286,6 @@ def _log_health_check_outcome(
 def run_health_check() -> dict[str, Any]:
     """
     Run health checks for all enabled targets.
-
-    Returns a summary dict:
-        {
-            "targets_checked": int,
-            "healthy": int,
-            "unhealthy": int,
-            "skipped": int,
-            "unhealthy_brands": [str, ...],
-            "errors": [str, ...],
-        }
     """
     from database.connection import get_session
 
@@ -306,59 +305,57 @@ def run_health_check() -> dict[str, Any]:
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # ── 1. Load enabled targets ───────────────────────────────────────────────
+    session = None
     try:
-        list_session = get_session()
-        targets = _get_enabled_targets(list_session)
-        list_session.close()
+        session = get_session()
+        targets = _get_enabled_targets(session)
+
+        if not targets:
+            logger.info("No enabled targets in prefect_target_registry. Nothing to check.")
+            return summary
+
+        logger.info("Loaded %d enabled target(s) for health check.", len(targets))
+
+        # Bulk fetch all recent outcomes in 1 query
+        brand_list = [t.brand for t in targets if t.brand]
+        outcomes_by_brand = _get_recent_outcomes_batch(session, brand_list)
+
+        # Evaluate and log each target within the single session
+        for target in targets:
+            brand: str = target.brand or "<unknown>"
+            registered_at = getattr(target, "registered_at", None)
+            days_since_reg = _days_since(registered_at)
+
+            logger.info("-" * 40)
+            logger.info("Checking target: '%s' (registered %s day(s) ago)", brand, days_since_reg)
+
+            recent = outcomes_by_brand.get(brand, [])
+            health_result = _analyse_target_health(brand, recent)
+
+            try:
+                _log_health_check_outcome(session, brand, health_result, days_since_reg, commit=False)
+            except Exception as exc:
+                logger.error("Error logging health outcome for '%s': %s", brand, exc)
+                summary["errors"].append(f"{brand}: outcome log failed — {exc}")
+
+            summary["targets_checked"] += 1
+            if health_result["still_healthy"]:
+                summary["healthy"] += 1
+            else:
+                summary["unhealthy"] += 1
+                summary["unhealthy_brands"].append(brand)
+
+        # Batch commit all logged outcomes
+        session.commit()
+
     except Exception as exc:
-        logger.critical("Cannot load targets from prefect_target_registry: %s", exc)
-        summary["errors"].append(f"Fatal: cannot load targets — {exc}")
-        return summary
-
-    if not targets:
-        logger.info("No enabled targets in prefect_target_registry. Nothing to check.")
-        return summary
-
-    logger.info("Loaded %d enabled target(s) for health check.", len(targets))
-
-    # ── 2. Check each target ──────────────────────────────────────────────────
-    for target in targets:
-        brand: str = target.brand or "<unknown>"
-        registered_at = getattr(target, "registered_at", None)
-        days_since_reg = _days_since(registered_at)
-
-        logger.info("-" * 40)
-        logger.info("Checking target: '%s' (registered %s day(s) ago)", brand, days_since_reg)
-
-        try:
-            outcome_session = get_session()
-            recent = _get_recent_outcomes(outcome_session, brand)
-            outcome_session.close()
-        except Exception as exc:
-            logger.error("Error loading outcomes for '%s': %s", brand, exc)
-            summary["errors"].append(f"{brand}: outcome query failed — {exc}")
-            summary["skipped"] += 1
-            continue
-
-        # Analyse health
-        health_result = _analyse_target_health(brand, recent)
-
-        # Log result to DB
-        try:
-            log_session = get_session()
-            _log_health_check_outcome(log_session, brand, health_result, days_since_reg)
-            log_session.close()
-        except Exception as exc:
-            logger.error("Error logging health outcome for '%s': %s", brand, exc)
-            summary["errors"].append(f"{brand}: outcome log failed — {exc}")
-
-        summary["targets_checked"] += 1
-        if health_result["still_healthy"]:
-            summary["healthy"] += 1
-        else:
-            summary["unhealthy"] += 1
-            summary["unhealthy_brands"].append(brand)
+        logger.critical("Health check execution failed: %s", exc)
+        summary["errors"].append(f"Fatal: health check failed — {exc}")
+        if session:
+            session.rollback()
+    finally:
+        if session:
+            session.close()
 
             # TODO [fast-follow — Repair Agent]: Once `agent/repair_agent.py` is
             # implemented, trigger automated re-exploration and selector patching here:

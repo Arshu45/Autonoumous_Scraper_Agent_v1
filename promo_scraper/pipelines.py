@@ -33,6 +33,7 @@ class PostgresPipeline:
     def open_spider(self, spider):
         self.session = get_session()
         self.policy_engine = TeamPolicyEngine()
+        self.competitor_cache = {}
         self.items_scraped = 0
         self.items_inserted = 0
         self.items_updated = 0
@@ -50,8 +51,10 @@ class PostgresPipeline:
         title       = item.get('title', '')
         source_url  = item.get('source_url')
 
-        # 1. Look up competitor_id from DB
-        competitor = self.session.query(Competitor).filter_by(name=brand_name).first()
+        # 1. Look up competitor_id from DB (cached per pipeline run)
+        if brand_name not in self.competitor_cache:
+            self.competitor_cache[brand_name] = self.session.query(Competitor).filter_by(name=brand_name).first()
+        competitor = self.competitor_cache[brand_name]
         if not competitor:
             spider.logger.warning(f"Competitor '{brand_name}' not found in DB. Skipping item.")
             return item
@@ -91,13 +94,32 @@ class PostgresPipeline:
                 created_at    = datetime.now(timezone.utc),
             )
             self.session.add(promotion)
-            self.session.flush()
             self.items_inserted += 1
 
-        # Sync team assignment rules
-        self.policy_engine.sync_promotion_assignments(self.session, promotion)
+        # Flush and sync team assignments inside a savepoint.
+        # If this item causes a DB integrity error (e.g. duplicate offer_hash
+        # from a spider returning duplicate items), rolling back to the savepoint
+        # recovers the session from PostgreSQL's aborted-transaction state —
+        # letting all subsequent items continue in the same outer transaction.
+        try:
+            sp = self.session.begin_nested()  # issues SAVEPOINT
+            self.session.flush()
+            self.policy_engine.sync_promotion_assignments(self.session, promotion)
+            sp.commit()                        # issues RELEASE SAVEPOINT
+        except Exception as item_exc:
+            sp.rollback()                      # issues ROLLBACK TO SAVEPOINT
+            # Undo the counter bump since this item wasn't flushed
+            if existing:
+                self.items_updated -= 1
+            else:
+                self.items_inserted -= 1
+            spider.logger.error(
+                "Skipping item (brand=%s, hash=%s): DB error isolated by savepoint: %s",
+                brand_name, offer_hash, item_exc,
+            )
 
         return item
+
 
     def close_spider(self, spider):
         # Single batch commit for all items — 10-50× faster than per-row commits.

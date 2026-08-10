@@ -58,19 +58,23 @@ def score_anti_bot_risk(resp, dom: str) -> Tuple[str, Dict[str, bool]]:
     return risk, triggered
 
 def clean_dom_regex(dom_html: str) -> str:
-    # Remove head, script, style, svg, path, iframe, noscript
-    dom_html = re.sub(r"<head\b[^>]*>.*?</head>", "", dom_html, flags=re.S | re.I)
-    dom_html = re.sub(r"<script\b[^>]*>.*?</script>", "", dom_html, flags=re.S | re.I)
-    dom_html = re.sub(r"<style\b[^>]*>.*?</style>", "", dom_html, flags=re.S | re.I)
-    dom_html = re.sub(r"<svg\b[^>]*>.*?</svg>", "", dom_html, flags=re.S | re.I)
-    dom_html = re.sub(r"<iframe\b[^>]*>.*?</iframe>", "", dom_html, flags=re.S | re.I)
-    dom_html = re.sub(r"<noscript\b[^>]*>.*?</noscript>", "", dom_html, flags=re.S | re.I)
+    """Safely cleans the HTML DOM by decomposing unneeded tags (head, script, style, svg, iframe, noscript)."""
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(dom_html, "html.parser")
+        for tag in soup(["head", "script", "style", "svg", "iframe", "noscript", "path"]):
+            tag.decompose()
+        dom_cleaned = str(soup)
+    except (ImportError, Exception) as exc:
+        logger.debug("BeautifulSoup DOM parsing not available or failed (%s), using regex fallback", exc)
+        dom_cleaned = re.sub(r"<(head|script|style|svg|iframe|noscript)\b[^>]*>.*?</\1>", "", dom_html, flags=re.S | re.I)
+
     # Remove empty lines and leading/trailing whitespace
-    lines = [line.strip() for line in dom_html.splitlines() if line.strip()]
-    dom_html = "\n".join(lines)
-    if len(dom_html) > 50000:
-        dom_html = dom_html[:50000] + "\n... [truncated]"
-    return dom_html
+    lines = [line.strip() for line in dom_cleaned.splitlines() if line.strip()]
+    dom_cleaned = "\n".join(lines)
+    if len(dom_cleaned) > 50000:
+        dom_cleaned = dom_cleaned[:50000] + "\n... [truncated]"
+    return dom_cleaned
 
 def parse_json_object(raw: str) -> Dict[str, Any] | None:
     if not raw:

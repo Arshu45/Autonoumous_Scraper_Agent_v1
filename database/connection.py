@@ -62,9 +62,13 @@ def get_session(max_retries: int = 3, initial_delay: float = 1.0) -> Session:
             session.close()
     """
     for attempt in range(max_retries):
+        session = SessionLocal()
         try:
-            return SessionLocal()
+            # Force connection checkout from the engine pool to verify availability
+            session.connection()
+            return session
         except SATimeoutError as err:
+            session.close()
             if attempt == max_retries - 1:
                 logger.error("DB connection pool exhausted after %d attempts.", max_retries)
                 raise err

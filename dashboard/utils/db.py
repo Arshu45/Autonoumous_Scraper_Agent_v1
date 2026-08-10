@@ -18,7 +18,7 @@ from database.connection import engine
 DASHBOARD_LOOKBACK_DAYS = int(os.getenv("DASHBOARD_LOOKBACK_DAYS", "90"))
 
 
-@st.cache_resource(ttl=60)
+@st.cache_data(ttl=60)
 def get_promotions() -> pd.DataFrame:
     """Fetch recent promotions joined with competitor name and assigned team IDs."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=DASHBOARD_LOOKBACK_DAYS)).strftime("%Y-%m-%d")

@@ -14,7 +14,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from prefect import flow, task, get_run_logger
-from scripts.logging_setup import attach_file_logger, detach_file_logger
+from scripts.logging_setup import scoped_file_logger
 
 # ─────────────────────────────────────────────
 # Task: Scrape a SINGLE brand target (runs concurrently via .map)
@@ -202,25 +202,34 @@ def master_pipeline():
 
     logger = get_run_logger()
 
-    # ── Attach timestamped file logger for this entire run ──
-    file_handler = attach_file_logger(source="pipeline")
+    with scoped_file_logger(source="pipeline") as log_path:
+        logger.info("🚀 Master pipeline starting...")
+        logger.info("MAX_CONCURRENT_BROWSERS = %d", MAX_CONCURRENT_BROWSERS)
 
-    logger.info("🚀 Master pipeline starting...")
-    logger.info("MAX_CONCURRENT_BROWSERS = %d", MAX_CONCURRENT_BROWSERS)
+        from scripts.run_hybrid_promo_scraper import load_targets
+        targets = load_targets()
+        logger.info(
+            "Running %d brand targets, %d at a time...",
+            len(targets), MAX_CONCURRENT_BROWSERS,
+        )
 
-    from scripts.run_hybrid_promo_scraper import load_targets
-    targets = load_targets()
-    logger.info(
-        "Running %d brand targets, %d at a time...",
-        len(targets), MAX_CONCURRENT_BROWSERS,
-    )
-
-    hybrid_results = []
-    try:
+        hybrid_results = []
         for i in range(0, len(targets), MAX_CONCURRENT_BROWSERS):
             batch = targets[i:i + MAX_CONCURRENT_BROWSERS]
             batch_futures = scrape_brand_target.map(batch)
-            hybrid_results.extend(f.result() for f in batch_futures)
+            for f, t_info in zip(batch_futures, batch):
+                brand_name = t_info.get("brand", "unknown")
+                try:
+                    res = f.result(raise_on_failure=False)
+                    if isinstance(res, Exception):
+                        hybrid_results.append({"brand": brand_name, "error": f"Prefect task exception: {res}"})
+                    elif isinstance(res, dict):
+                        hybrid_results.append(res)
+                    else:
+                        hybrid_results.append({"brand": brand_name, "error": f"Unexpected task output: {res}"})
+                except Exception as exc:
+                    logger.error("Failed to retrieve result for brand %s: %s", brand_name, exc)
+                    hybrid_results.append({"brand": brand_name, "error": f"Infrastructure failure: {exc}"})
 
         generate_report(hybrid_results)
 
@@ -272,8 +281,6 @@ def master_pipeline():
                 "⚠️  %d brand(s) still failing after %d retry attempts: %s",
                 len(failed_brands), MAX_RETRY_ATTEMPTS, ", ".join(sorted(failed_brands)),
             )
-    finally:
-        log_path = detach_file_logger(file_handler)
         logger.info("📄 Full run log saved → %s", log_path)
 
 

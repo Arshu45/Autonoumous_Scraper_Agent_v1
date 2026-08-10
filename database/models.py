@@ -89,7 +89,7 @@ class AgentRunOutcome(Base):
     was_auto_approved       = Column(Boolean, nullable=True)
     days_since_registration = Column(Integer, nullable=True)
     still_healthy_at_check  = Column(Boolean, nullable=True)         # NULL until health check fills in
-    checked_at              = Column(DateTime, default=datetime.utcnow)
+    checked_at              = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     def __repr__(self):
         return f"<AgentRunOutcome(id={self.id}, brand='{self.brand}', run_type='{self.run_type}')>"
@@ -108,7 +108,7 @@ class AgentAuditLog(Base):
     user_id    = Column(String(255), nullable=False)
     action     = Column(String(50), nullable=False)
     details    = Column(JSONB, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     def __repr__(self):
         return f"<AgentAuditLog(id={self.id}, brand='{self.brand}', action='{self.action}')>"
@@ -125,7 +125,7 @@ class PrefectTargetRegistry(Base):
     brand         = Column(String(255), unique=True, nullable=True)
     config_path   = Column(String(500), nullable=True)
     enabled       = Column(Boolean, default=True)
-    registered_at = Column(DateTime, default=datetime.utcnow)
+    registered_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     registered_by = Column(String(255), nullable=True)
 
     def __repr__(self):

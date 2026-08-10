@@ -185,14 +185,15 @@ def _run_scraper(
     def _put(level: str, msg: str):
         log_q.put((level, msg))
 
-    # Attach queue handler (UI live feed)
+    # Both handlers are set up here but attached INSIDE the try block below.
+    # This guarantees the finally clause always removes them — even if
+    # attach_file_logger() raises (e.g. logs/ not writable, disk full).
+    # Without this guard, a failed setup would leave a stale QueueHandler
+    # on the root logger that accumulates on every subsequent run.
+    root_logger = logging.getLogger()
     handler = QueueHandler(log_q)
     handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", "%H:%M:%S"))
-    root_logger = logging.getLogger()
-    root_logger.addHandler(handler)
-
-    # Attach file handler (persistent log file)
-    file_handler = attach_file_logger(source="ui")
+    file_handler = None
 
     def run_batch(batch: list[dict], pass_label: str = "Main") -> list[dict]:
         results = []
@@ -228,6 +229,8 @@ def _run_scraper(
         return results
 
     try:
+        root_logger.addHandler(handler)
+        file_handler = attach_file_logger(source="ui")
         # ── Main run ──
         _put("HEAD", SEP_THICK)
         _put("HEAD", f"🚀  SCRAPER START — {len(targets)} brand(s)")
@@ -302,9 +305,11 @@ def _run_scraper(
                 )
 
     finally:
-        log_path = detach_file_logger(file_handler)
-        result_store["log_path"] = log_path
-        _put("SUCCESS", f"📄 Full log saved → {log_path}")
+        # Guard: file_handler is None if attach_file_logger raised before completing
+        if file_handler is not None:
+            log_path = detach_file_logger(file_handler)
+            result_store["log_path"] = log_path
+            _put("SUCCESS", f"📄 Full log saved → {log_path}")
         root_logger.removeHandler(handler)
         log_q.put("__DONE__")
 

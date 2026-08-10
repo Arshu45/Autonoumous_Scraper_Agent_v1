@@ -37,6 +37,8 @@ LOGS_DIR = os.path.join(
 LOG_FORMAT  = "%(asctime)s [%(levelname)-8s] %(name)s: %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+from contextlib import contextmanager
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def build_log_path(source: str = "run") -> str:
@@ -49,10 +51,10 @@ def build_log_path(source: str = "run") -> str:
 def attach_file_logger(source: str = "run") -> logging.FileHandler:
     """
     Create a FileHandler for this run, attach it to the root logger, and
-    return it.  Call detach_file_logger(handler) when the run finishes.
+    return it. Call detach_file_logger(handler) when the run finishes.
 
     Args:
-        source: Short label appended to the filename  (cli | pipeline | ui).
+        source: Short label appended to the filename (cli | pipeline | ui).
 
     Returns:
         The FileHandler so the caller can detach it later.
@@ -75,23 +77,52 @@ def attach_file_logger(source: str = "run") -> logging.FileHandler:
     return handler
 
 
-def detach_file_logger(handler: logging.FileHandler) -> str:
+def detach_file_logger(handler: logging.FileHandler | None) -> str:
     """
-    Write a closing footer, flush, and remove the handler from the root
-    logger.
+    Write a closing footer, flush, and safely remove the handler from the root logger.
 
     Returns:
-        The absolute path of the log file that was written.
+        The absolute path of the log file that was written (or empty string if handler is None).
     """
-    log_path = handler.baseFilename
+    if handler is None:
+        return ""
 
+    log_path = getattr(handler, "baseFilename", "")
     root = logging.getLogger()
-    root.info("=" * 70)
-    root.info("SCRAPER RUN FINISHED  |  log=%s", log_path)
-    root.info("=" * 70)
 
-    handler.flush()
-    handler.close()
-    root.removeHandler(handler)
+    if handler in root.handlers:
+        try:
+            root.info("=" * 70)
+            root.info("SCRAPER RUN FINISHED  |  log=%s", log_path)
+            root.info("=" * 70)
+        except Exception:
+            pass
+        try:
+            root.removeHandler(handler)
+        except Exception:
+            pass
+
+    try:
+        handler.flush()
+        handler.close()
+    except Exception:
+        pass
 
     return log_path
+
+
+@contextmanager
+def scoped_file_logger(source: str = "run"):
+    """
+    Context manager that attaches a FileHandler for a run and guarantees it is
+    detached and closed even if an exception is raised.
+
+    Usage:
+        with scoped_file_logger("pipeline") as log_path:
+            ...
+    """
+    handler = attach_file_logger(source)
+    try:
+        yield handler.baseFilename
+    finally:
+        detach_file_logger(handler)

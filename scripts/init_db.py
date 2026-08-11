@@ -1,7 +1,7 @@
 """
 init_db.py
 ==========
-Creates all database tables (competitors, promotions) if they do not exist.
+Creates all database tables (competitors, promotions, agent audit logs, target registry) if they do not exist.
 
 Usage:
     python scripts/init_db.py
@@ -17,10 +17,28 @@ from database.connection import engine, init_db
 
 
 def ensure_schema_columns():
-    """Apply small schema updates for existing local databases."""
+    """Apply incremental schema updates for existing local databases."""
     statements = [
+        # Promotions table updates
         "ALTER TABLE promotions ADD COLUMN IF NOT EXISTS category VARCHAR(100)",
         "ALTER TABLE promotions DROP COLUMN IF EXISTS raw_text",
+
+        # Competitors table agent columns (Migration C)
+        "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS extraction_strategy VARCHAR(20) DEFAULT 'hybrid'",
+        "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS agent_generated BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS agent_confidence INTEGER",
+        "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS agent_notes TEXT",
+        "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS source_url TEXT",
+
+        # Promotion team assignments junction table
+        """
+        CREATE TABLE IF NOT EXISTS promotion_team_assignments (
+            id SERIAL PRIMARY KEY,
+            promotion_id INTEGER NOT NULL REFERENCES promotions(id) ON DELETE CASCADE,
+            team_id VARCHAR(50) NOT NULL,
+            assigned_at TIMESTAMP WITHOUT TIME ZONE DEFAULT (now() AT TIME ZONE 'utc') NOT NULL
+        )
+        """
     ]
     with engine.begin() as conn:
         for statement in statements:
@@ -40,16 +58,20 @@ def main():
         print("\nPlease check your DATABASE_URL inside the .env file.")
         sys.exit(1)
 
-    # 2. Recreate tables
+    # 2. Initialize tables & migrations
     try:
         init_db()
         ensure_schema_columns()
-        print("   ✓ All tables ('competitors', 'promotions') initialized successfully.")
+        print(
+            "   ✓ All 6 tables ('competitors', 'promotions', 'promotion_team_assignments', "
+            "'agent_run_outcomes', 'agent_audit_log', 'prefect_target_registry') initialized successfully."
+        )
         print("\n✅ Database is ready!")
         print("\n👉 Next steps:")
-        print("   1. python flows/master_pipeline.py  ← run all scrapers")
+        print("   1. python scripts/run_scraper_agent.py --url <URL> --brand <BRAND>  ← Register target brand")
+        print("   2. python flows/master_pipeline.py                                 ← Run full scraper pipeline")
     except Exception as e:
-        print(f"❌ Failed to create tables: {e}")
+        print(f"❌ Failed to initialize tables: {e}")
         sys.exit(1)
 
 

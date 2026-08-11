@@ -1,0 +1,220 @@
+{
+  "Womens (WIFA)": {
+    "team_id": "womens_wifa",
+    "categories": ["Womens", "Others", "Footwear"],
+    "allowed_brands": {
+      "David Jones": {},
+      "The Iconic": {
+        "categories": ["Womens", "Others"]
+      },
+      "Country Road": {},
+      "Witchery": {},
+      "Forever New": {
+        "categories": ["Womens"]
+      },
+      "Seed Heritage": {},
+      "Taking Shape": {},
+      "Levi's": {},
+      "Marcs": {},
+      "David Lawrance": {},
+      "Review": {},
+      "Cue": {},
+      "Veronika Maine": {},
+      "Converse": {
+        "categories": ["Footwear"]
+      },
+      "Skechers": {
+        "categories": ["Womens", "Footwear"]
+      },
+      "Shoe hq": {
+        "categories": ["Womens", "Footwear"]
+      },
+      "Tommy Hilfiger": {},
+      "Bonds": {
+        "categories": ["Womens", "Others"]
+      },
+      "Berlei": {},
+      "Triumph": {},
+      "Calvin Klein": {
+        "categories": ["Womens", "Others"]
+      },
+      "Jockey": {
+        "categories": ["Womens", "Others"]
+      },
+      "Mimco": {
+        "categories": ["Womens", "Others"]
+      }
+    }
+  },
+  "Kids & Toys": {
+    "team_id": "kids_toys_team",
+    "categories": ["Kids", "Toys", "Others"],
+    "allowed_brands": {
+      "David Jones": {},
+      "The Iconic kids": {
+        "categories": ["Kids", "Toys", "Others"]
+      },
+      "K Mart": {},
+      "H&M": {},
+      "BIG W": {
+        "categories": ["Kids", "Toys"]
+      },
+      "Target": {
+        "categories": ["Kids", "Toys", "Others"]
+      },
+      "Cotton On": {
+        "categories": ["Kids", "Toys", "Others"]
+      },
+      "Bonds": {
+        "categories": ["Kids", "Toys", "Others"]
+      },
+      "Uniqlo": {},
+      "Best & Less": {
+        "categories": ["Kids", "Toys", "Others"]
+      },
+      "Next Australia": {}
+    }
+  },
+  "Toys": {
+    "team_id": "toys_team",
+    "categories": ["Toys", "Others"],
+    "allowed_brands": {
+      "David Jones": {},
+      "The Iconic": {
+        "categories": ["Toys"]
+      },
+      "K Mart": {},
+      "BIG W": {
+        "categories": ["Toys"]
+      },
+      "Target": {
+        "categories": ["Toys", "Others"]
+      },
+      "Amazon Toys": {
+        "categories": ["Toys", "Others"]
+      },
+      "Toyworld": {
+        "categories": ["Toys", "Others"]
+      }
+    }
+  },
+  "Menswear": {
+    "team_id": "menswear_team",
+    "categories": ["Menswear", "Others","Footwear"],
+    "allowed_brands": {
+      "David Jones": {},
+      "The Iconic Mens": {
+        "categories": ["Menswear", "Footwear", "Others"]
+      },
+      "Tommy Hilfiger": {
+        "categories": ["Menswear"]
+      },
+      "Calvin Klein": {
+        "categories": ["Menswear", "Others"]
+      },
+      "Ben Sherman": {},
+      "ASOS": {},
+      "Cotton On": {
+        "categories": ["Menswear", "Others"]
+      },
+      "Just Jeans": {
+        "categories": ["Menswear"]
+      },
+      "Bonds": {
+        "categories": ["Menswear", "Others"]
+      },
+      "Levi's": {},
+      "Ralph Lauren": {},
+      "Rodd & Gunn": {},
+      "Lacoste": {},
+      "Gazman": {},
+      "Gant": {},
+      "Adidas": {},
+      "Champion": {
+        "categories": ["Menswear"]
+      },
+      "Puma": {
+        "categories": ["Menswear"]
+      },
+      "Van Heusen": {
+        "categories": ["Menswear", "Others"]
+      },
+      "Oxford Shop": {
+        "categories": ["Menswear", "Others"]
+      },
+      "Jack & Jones": {},
+      "Superdry": {
+        "categories": ["Menswear"]
+      },
+      "Wild Rhino": {
+        "categories": ["Menswear", "Footwear"]
+      },
+      "American Eagle": {
+        "categories": ["Menswear"]
+      }
+    }
+  },
+  "Entertainment": {
+    "team_id": "entertainment_team",
+    "categories": ["Entertainment", "Home", "Others"],
+    "allowed_brands":{
+      "JB Hi-Fi":{
+        "categories": ["Entertainment", "Home", "Others"]
+      },
+      "The Good Guys":{
+        "categories": ["Entertainment", "Others"]
+      },
+      "David Jones":{
+        "categories": ["Entertainment", "Others"]
+      },
+      "Harvey Norman":{
+        "categories": ["Entertainment", "Others"]
+      },
+      "Strandbags":{
+        "categories": ["Entertainment", "Others"]
+      },
+      "Harris Scarfe":{
+        "categories": ["Entertainment", "Others"]
+      }
+    }
+  },
+  "Beauty": {
+    "team_id": "beauty_team",
+    "categories": ["Beauty", "Others"],
+    "allowed_brands":{
+      "David Jones": {},
+      "The Iconic Beauty": {},
+      "MECCA": {},
+      "Adore Beauty": {},
+      "Sephora": {},
+      "Clarins": {},
+      "Clinique": {},
+      "Estee Lauder": {},
+      "Lancome": {},
+      "Bobbi Brown": {},
+      "MAC": {},
+      "YSL": {},
+      "Giorgio Armani": {}
+    }
+  },
+  "Home": {
+    "team_id": "home_team",
+    "categories": ["Home", "Others"],
+    "allowed_brands": {
+      "David Jones": {},
+      "Harris Scarfe": {},
+      "Bed Bath N' Table": {},
+      "Adairs": {},
+      "House": {},
+      "Target": {
+        "categories": ["Home", "Others"]
+      },
+      "BIG W": {
+        "categories": ["Home"]
+      },
+      "Kitchen Warehouse": {
+        "categories": ["Home"]
+      }
+    }
+  }
+}

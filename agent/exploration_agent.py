@@ -58,19 +58,23 @@ def score_anti_bot_risk(resp, dom: str) -> Tuple[str, Dict[str, bool]]:
     return risk, triggered
 
 def clean_dom_regex(dom_html: str) -> str:
-    # Remove head, script, style, svg, path, iframe, noscript
-    dom_html = re.sub(r"<head\b[^>]*>.*?</head>", "", dom_html, flags=re.S | re.I)
-    dom_html = re.sub(r"<script\b[^>]*>.*?</script>", "", dom_html, flags=re.S | re.I)
-    dom_html = re.sub(r"<style\b[^>]*>.*?</style>", "", dom_html, flags=re.S | re.I)
-    dom_html = re.sub(r"<svg\b[^>]*>.*?</svg>", "", dom_html, flags=re.S | re.I)
-    dom_html = re.sub(r"<iframe\b[^>]*>.*?</iframe>", "", dom_html, flags=re.S | re.I)
-    dom_html = re.sub(r"<noscript\b[^>]*>.*?</noscript>", "", dom_html, flags=re.S | re.I)
+    """Safely cleans the HTML DOM by decomposing unneeded tags (head, script, style, svg, iframe, noscript)."""
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(dom_html, "html.parser")
+        for tag in soup(["head", "script", "style", "svg", "iframe", "noscript", "path"]):
+            tag.decompose()
+        dom_cleaned = str(soup)
+    except (ImportError, Exception) as exc:
+        logger.debug("BeautifulSoup DOM parsing not available or failed (%s), using regex fallback", exc)
+        dom_cleaned = re.sub(r"<(head|script|style|svg|iframe|noscript)\b[^>]*>.*?</\1>", "", dom_html, flags=re.S | re.I)
+
     # Remove empty lines and leading/trailing whitespace
-    lines = [line.strip() for line in dom_html.splitlines() if line.strip()]
-    dom_html = "\n".join(lines)
-    if len(dom_html) > 50000:
-        dom_html = dom_html[:50000] + "\n... [truncated]"
-    return dom_html
+    lines = [line.strip() for line in dom_cleaned.splitlines() if line.strip()]
+    dom_cleaned = "\n".join(lines)
+    if len(dom_cleaned) > 50000:
+        dom_cleaned = dom_cleaned[:50000] + "\n... [truncated]"
+    return dom_cleaned
 
 def parse_json_object(raw: str) -> Dict[str, Any] | None:
     if not raw:
@@ -94,13 +98,20 @@ def call_exploration_vision(initial_ss_bytes: bytes, post_scroll_ss_bytes: bytes
     api_base = os.getenv("LITELLM_API_BASE")
     model_name = os.getenv("VISION_LLM_MODEL") or "openai/claude-haiku-4.5"
     
-    # Resize images before sending to fit within constraints and save tokens
+    # Resize images before sending to Vision API.
+    # full_page=True screenshots can be 5000-8000px tall on retail homepages.
+    # Cap at 1600×4000 to stay within token limits while keeping enough detail
+    # for the LLM to read text and identify promotional elements.
+    MAX_WIDTH  = 1600
+    MAX_HEIGHT = 4000
+
     def resize_img(data: bytes) -> bytes:
         try:
             img = Image.open(BytesIO(data))
-            if img.width > 1600:
-                ratio = 1600 / img.width
-                img = img.resize((1600, int(img.height * ratio)), Image.LANCZOS)
+            w, h = img.width, img.height
+            if w > MAX_WIDTH or h > MAX_HEIGHT:
+                ratio = min(MAX_WIDTH / w, MAX_HEIGHT / h)
+                img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
             buf = BytesIO()
             img.save(buf, format="PNG")
             return buf.getvalue()
@@ -375,8 +386,12 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
         except Exception:
             logger.debug("Network idle wait timed out, continuing...")
 
-        # Capturing initial screenshot
-        initial_ss_bytes = page.screenshot(full_page=False)
+        # ── Screenshot 1: Full-page capture immediately after load ──────────────
+        # full_page=True captures the ENTIRE page height (not just the viewport).
+        # This gives Gemini the complete layout: hero banners, product grids,
+        # promotional strips, and footer offers — all in a single image.
+        logger.info("Capturing full-page initial screenshot for %s", brand)
+        initial_ss_bytes = page.screenshot(full_page=True, timeout=60_000)
         with open(initial_ss_path, "wb") as f:
             f.write(initial_ss_bytes)
 
@@ -386,17 +401,52 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
             resp_status = response.status
             resp_headers = dict(response.headers)
 
-        # Scroll to trigger lazy loading
+        # ── Scroll to trigger lazy-load ──────────────────────────────────────────
         scroll_depth = 3
         for i in range(scroll_depth):
             page.evaluate("window.scrollBy(0, window.innerHeight)")
             page.wait_for_timeout(2000)
 
+        # Scroll back to top so carousels are in the viewport for cycling.
         page.evaluate("window.scrollTo(0, 0)")
         page.wait_for_timeout(1000)
 
-        # Capture post-scroll screenshot
-        post_scroll_ss_bytes = page.screenshot(full_page=False)
+        # ── Carousel cycling ─────────────────────────────────────────────────────
+        # Rotating announcement bars and hero sliders show one slide at a time.
+        # We wait 4 seconds between 4 cycles so every slide gets a chance to
+        # become the active/visible one before we take the second screenshot.
+        # This captures promo text that only appears in later carousel positions.
+        logger.info("Cycling carousels for %s (4 cycles × 4s)", brand)
+        CAROUSEL_CYCLES = 4
+        CAROUSEL_WAIT_MS = 4000
+        for cycle in range(CAROUSEL_CYCLES):
+            page.wait_for_timeout(CAROUSEL_WAIT_MS)
+            # Also try clicking the "next" arrow if it exists — some carousels
+            # pause autoplay and only advance on user interaction.
+            for next_selector in [
+                "[aria-label='Next']",
+                "[aria-label='next']",
+                ".slick-next",
+                ".carousel__next",
+                ".owl-next",
+                "[class*='carousel'][class*='next']",
+                "[class*='slider'][class*='next']",
+                "[class*='ann'][class*='next']",
+            ]:
+                try:
+                    btn = page.query_selector(next_selector)
+                    if btn and btn.is_visible():
+                        btn.click(timeout=1000)
+                        logger.debug("Carousel: clicked next arrow (%s) cycle %d", next_selector, cycle + 1)
+                        break
+                except Exception:
+                    pass
+
+        # ── Screenshot 2: Full-page after carousel cycling ────────────────────────
+        # By now all carousel slides have been active at least once.
+        # The full-page shot shows the page with the last-cycled slide visible.
+        logger.info("Capturing full-page post-carousel screenshot for %s", brand)
+        post_scroll_ss_bytes = page.screenshot(full_page=True, timeout=60_000)
         with open(post_scroll_ss_path, "wb") as f:
             f.write(post_scroll_ss_bytes)
 
@@ -444,6 +494,7 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
         }
 
     # 5. Build and return SiteAnalysis
+    category_hint = visual_data.get("category_hint", "")
     return SiteAnalysis(
         url=url,
         brand=brand,
@@ -460,5 +511,6 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
         gemini_visual_summary=visual_data.get("summary", ""),
         notes=dom_analysis_data.get("notes", ""),
         text_selectors=dom_analysis_data.get("text_selectors", []),
-        screenshot_selectors=dom_analysis_data.get("screenshot_selectors", [])
+        screenshot_selectors=dom_analysis_data.get("screenshot_selectors", []),
+        category_hint=category_hint,
     )

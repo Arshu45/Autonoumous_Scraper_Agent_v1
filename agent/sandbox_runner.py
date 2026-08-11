@@ -19,7 +19,7 @@ _DOCKER_DESKTOP_SOCK = Path.home() / ".docker" / "desktop" / "docker.sock"
 _STANDARD_SOCK = Path("/var/run/docker.sock")
 
 
-def _get_docker_client(docker_sdk):
+def _get_docker_client(docker_sdk, timeout: int = 300):
     """
     Return a connected Docker client, auto-detecting Docker Desktop's socket.
 
@@ -29,15 +29,15 @@ def _get_docker_client(docker_sdk):
     """
     # 1. Honour explicit DOCKER_HOST if set
     if os.environ.get("DOCKER_HOST"):
-        return docker_sdk.from_env()
+        return docker_sdk.from_env(timeout=timeout)
 
     # 2. Try Docker Desktop socket (Linux Docker Desktop)
     if _DOCKER_DESKTOP_SOCK.exists():
         logger.debug("Connecting via Docker Desktop socket: %s", _DOCKER_DESKTOP_SOCK)
-        return docker_sdk.DockerClient(base_url=f"unix://{_DOCKER_DESKTOP_SOCK}")
+        return docker_sdk.DockerClient(base_url=f"unix://{_DOCKER_DESKTOP_SOCK}", timeout=timeout)
 
     # 3. Fall back to standard socket (Docker Engine via apt/snap)
-    return docker_sdk.from_env()
+    return docker_sdk.from_env(timeout=timeout)
 
 
 def detect_violations(logs: str, result: dict) -> list[str]:
@@ -109,7 +109,7 @@ def detect_violations(logs: str, result: dict) -> list[str]:
 def run_scraper_in_sandbox(
     scraper_code: Optional[str],
     config: dict,
-    timeout_seconds: int = 60,
+    timeout_seconds: int = 240,
 ) -> dict:
     """
     Run the scraper inside a locked-down, single-use Docker container.
@@ -145,12 +145,40 @@ def run_scraper_in_sandbox(
             "violations": ["timeout_or_crash"],
         }
 
-    env_vars: dict[str, str] = {"CONFIG_JSON": json.dumps(config)}
+    env_vars: dict[str, str] = {
+        "CONFIG_JSON": json.dumps(config),
+        "LITELLM_LOCAL_MODEL_COST_MAP": "True",
+        "LITELLM_TELEMETRY": "False",
+    }
     if scraper_code:
         env_vars["SCRAPER_CODE_B64"] = base64.b64encode(scraper_code.encode()).decode()
 
+    # ── Forward host env vars required by HybridPromoExtractor ─────────────
+    # The container is fully isolated and does NOT inherit the host environment.
+    # We explicitly pass the minimum set of variables the scraper needs so it
+    # can initialise correctly (PROMO_CATEGORIES, API keys, tuning knobs).
+    # Do NOT forward DATABASE_URL or other secrets unrelated to scraping.
+    _PASSTHROUGH_ENV_VARS = [
+        # Required by HybridPromoExtractor.__init__ (raises EnvironmentError if missing)
+        "PROMO_CATEGORIES",
+        # Vision API credentials — used by _load_allowed_categories + _client init
+        "GEMINI_API_KEY",
+        "LITELLM_API_KEY",
+        "LITELLM_API_BASE",
+        "VISION_LLM_MODEL",
+        "LLM_MODEL",
+        # Tuning knobs read at import time
+        "VISION_API_MIN_DELAY",
+        "VISION_COST_PER_MILLION_TOKENS_USD",
+    ]
+    for var in _PASSTHROUGH_ENV_VARS:
+        val = os.environ.get(var)
+        if val is not None:
+            env_vars[var] = val
+    logger.debug("Sandbox env vars forwarded: %s", list(env_vars.keys()))
+
     try:
-        client = _get_docker_client(docker_sdk)
+        client = _get_docker_client(docker_sdk, timeout=timeout_seconds + 30)
     except Exception as exc:
         logger.error("Cannot connect to Docker daemon: %s", exc)
         return {
@@ -170,11 +198,14 @@ def run_scraper_in_sandbox(
             command=["python", "-m", "sandbox_entrypoint"],
             detach=True,
             network_mode=NETWORK_NAME,
-            mem_limit="512m",
+            mem_limit="768m",         # Raised: Chromium + Vision API responses need headroom
             nano_cpus=1_000_000_000,
-            pids_limit=64,
+            pids_limit=128,           # Raised: Chromium spawns broker/GPU/renderer subprocesses
             read_only=True,
-            tmpfs={"/tmp": "size=64m"},
+            tmpfs={
+                "/tmp": "size=256m",  # Raised: Chromium uses /tmp when --disable-dev-shm-usage
+                "/dev/shm": "size=256m",  # Critical: Chromium IPC; Docker default 64MB causes "Target crashed"
+            },
             cap_drop=["ALL"],
             security_opt=["no-new-privileges"],
             environment=env_vars,
@@ -193,12 +224,18 @@ def run_scraper_in_sandbox(
         violations = detect_violations(logs, result)
         exit_code = result.get("StatusCode")
         logger.info("Sandbox finished: exit_code=%s violations=%s", exit_code, violations)
+        if exit_code != 0 and logs.strip():
+            # Surface the container's stderr/stdout so failures are visible
+            # in the agent log without needing a separate `docker run` debug session.
+            logger.warning("Sandbox container output (exit=%s):\n%s", exit_code, logs.strip())
         return {"exit_code": exit_code, "logs": logs, "violations": violations}
 
     except Exception as exc:
         logger.warning("Sandbox wait/log error: %s", exc)
         try:
             partial_logs = container.logs().decode(errors="replace")
+            if partial_logs.strip():
+                logger.warning("Partial sandbox container output before error:\n%s", partial_logs.strip())
         except Exception:
             partial_logs = ""
         return {

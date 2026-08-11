@@ -31,23 +31,59 @@ def run_generation_agent(state: AgentState) -> AgentState:
     return state
 
 def run_validation_agent(state: AgentState) -> AgentState:
-    from agent.validation_agent import run_validation_agent as _run
-    return _run(state)
+    logger.info("Running validation agent on brand=%s", state.brand)
+    try:
+        from agent.validation_agent import run_validation_agent as _run
+        return _run(state)
+    except Exception as e:
+        logger.exception("Validation agent failed on brand=%s", state.brand)
+        state.status = "failed"
+        state.error = str(e)
+        return state
 
 def run_registration(state: AgentState) -> AgentState:
-    from agent.registration_agent import run_registration as _run
-    return _run(state)
+    logger.info("Running registration agent on brand=%s", state.brand)
+    try:
+        from agent.registration_agent import run_registration as _run
+        return _run(state)
+    except Exception as e:
+        logger.exception("Registration agent failed on brand=%s", state.brand)
+        state.status = "failed"
+        state.error = str(e)
+        return state
+
+def route_after_exploration(state: AgentState) -> str:
+    """Short-circuit to END if exploration failed — avoids wasting a Docker sandbox run."""
+    if state.status == "failed":
+        logger.warning(
+            "Exploration failed for brand=%s (error: %s). Short-circuiting pipeline.",
+            state.brand, state.error,
+        )
+        return "failed"
+    return "ok"
+
+
+def route_after_generation(state: AgentState) -> str:
+    """Short-circuit to END if generation failed — avoids launching the sandbox with an empty config."""
+    if state.status == "failed":
+        logger.warning(
+            "Generation failed for brand=%s (error: %s). Short-circuiting pipeline.",
+            state.brand, state.error,
+        )
+        return "failed"
+    return "ok"
+
 
 def route_after_validation(state: AgentState) -> str:
     # If validation_report is None or doesn't exist, default to reject
     if not state.validation_report:
         logger.warning("No validation report found. Routing to reject.")
         return "reject"
-        
+
     if state.validation_report.sandbox_violations:
         logger.warning("Sandbox violations detected. Routing to reject.")
         return "reject"
-        
+
     score = state.validation_report.confidence_score
     if score >= 90:
         logger.info("Validation score >= 90 (%d). Routing to auto_approve.", score)
@@ -69,8 +105,25 @@ def build_agent_graph() -> StateGraph:
 
     graph.set_entry_point("exploration")
 
-    graph.add_edge("exploration", "generation")
-    graph.add_edge("generation",  "validation")
+    # Short-circuit to END immediately if exploration or generation fails.
+    # This prevents wasting a Docker sandbox run on a config that will be rejected.
+    graph.add_conditional_edges(
+        "exploration",
+        route_after_exploration,
+        {
+            "ok":     "generation",
+            "failed": END,
+        }
+    )
+
+    graph.add_conditional_edges(
+        "generation",
+        route_after_generation,
+        {
+            "ok":     "validation",
+            "failed": END,
+        }
+    )
 
     graph.add_conditional_edges(
         "validation",
@@ -85,3 +138,24 @@ def build_agent_graph() -> StateGraph:
     graph.add_edge("registration", END)
     
     return graph.compile()
+
+def run_agent_pipeline(url: str, brand: str, requirements: str = "") -> dict:
+    """
+    Executes the agent graph in a standalone function safely callable from
+    ProcessPoolExecutor without importing Streamlit or UI modules.
+    """
+    state = AgentState(url=url, brand=brand, requirements=requirements)
+    graph = build_agent_graph()
+    res = graph.invoke(state)
+    
+    if hasattr(res, "model_dump"):
+        return res.model_dump()
+    elif isinstance(res, dict):
+        out = dict(res)
+        if "validation_report" in out and out["validation_report"] is not None:
+            vr = out["validation_report"]
+            if hasattr(vr, "model_dump"):
+                out["validation_report"] = vr.model_dump()
+        return out
+    return res
+

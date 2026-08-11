@@ -18,10 +18,11 @@ class GroqClient(LLMClient):
     def __init__(self, model: str | None = None):
         self._model   = model or os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
         self._api_key = os.getenv("GROQ_API_KEY")
+        self._llm     = ChatGroq(model=self._model, api_key=self._api_key)
 
     def chat(self, messages: list[dict], temperature: float = 0) -> str:
         logger.debug("Groq call | model=%s | msgs=%d", self._model, len(messages))
-        llm = ChatGroq(model=self._model, temperature=temperature, api_key=self._api_key)
+        llm = self._llm.bind(temperature=temperature) if temperature != 0 else self._llm
         lc_messages = []
         for m in messages:
             role, content = m["role"], m["content"]

@@ -99,6 +99,12 @@ def test_approve_callback():
 
     _record("approve callback return success", success, msg)
 
+    from agent.registration_agent import _brand_slug as slug_fn
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "config", "targets", f"{slug_fn(brand)}.json"
+    )
+
     # Assert database state
     session = get_session()
     try:
@@ -113,11 +119,6 @@ def test_approve_callback():
         _record("agent_audit_log row written", audit is not None and audit.user_id == user_id)
 
         # KEY FIX: verify the original pending outcome row was resolved
-        from agent.registration_agent import _brand_slug as slug_fn
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "config", "targets", f"{slug_fn(brand)}.json"
-        )
         file_exists = os.path.exists(config_path)
         _record("config JSON file written to filesystem", file_exists)
 

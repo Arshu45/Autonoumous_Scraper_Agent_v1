@@ -79,7 +79,20 @@ def run_registration(state: AgentState) -> AgentState:
     )
     extraction_strategy = config_json.get("extraction_strategy", "hybrid")
     agent_confidence = validation_report.confidence_score
-    source_url = config_json.get("source_url") or state.url
+    raw_source = config_json.get("source_url") or state.url
+    if isinstance(raw_source, list) and raw_source:
+        first_src = raw_source[0]
+        if isinstance(first_src, dict):
+            source_url = first_src.get("url") or state.url
+        elif isinstance(first_src, str):
+            source_url = first_src
+        else:
+            source_url = state.url
+    elif isinstance(raw_source, str):
+        source_url = raw_source
+    else:
+        source_url = state.url
+
     agent_notes = validation_report.score_breakdown.get("notes", "") if validation_report.score_breakdown else ""
 
     # ── 2. Verify config file exists ───────────────────────────────────────────
@@ -97,61 +110,62 @@ def run_registration(state: AgentState) -> AgentState:
     # ── 3. Atomic DB writes ────────────────────────────────────────────────────
     session = get_session()
     try:
-        with session.begin():
-            # 3a. UPSERT competitors row
-            competitor = session.query(Competitor).filter_by(name=brand).first()
-            if competitor:
-                competitor.extraction_strategy = extraction_strategy
-                competitor.agent_generated = True
-                competitor.agent_confidence = agent_confidence
-                competitor.agent_notes = agent_notes or None
-                competitor.source_url = source_url
-                logger.info("Updated competitor row for brand=%s", brand)
-            else:
-                competitor = Competitor(
-                    name=brand,
-                    enabled=True,
-                    extraction_strategy=extraction_strategy,
-                    agent_generated=True,
-                    agent_confidence=agent_confidence,
-                    agent_notes=agent_notes or None,
-                    source_url=source_url,
-                )
-                session.add(competitor)
-                logger.info("Created new competitor row for brand=%s", brand)
+        # 3a. UPSERT competitors row
+        competitor = session.query(Competitor).filter_by(name=brand).first()
+        if competitor:
+            competitor.extraction_strategy = extraction_strategy
+            competitor.agent_generated = True
+            competitor.agent_confidence = agent_confidence
+            competitor.agent_notes = agent_notes or None
+            competitor.source_url = source_url
+            logger.info("Updated competitor row for brand=%s", brand)
+        else:
+            competitor = Competitor(
+                name=brand,
+                enabled=True,
+                extraction_strategy=extraction_strategy,
+                agent_generated=True,
+                agent_confidence=agent_confidence,
+                agent_notes=agent_notes or None,
+                source_url=source_url,
+            )
+            session.add(competitor)
+            logger.info("Created new competitor row for brand=%s", brand)
 
-            # 3b. INSERT INTO prefect_target_registry (UPSERT by brand)
-            registry_row = session.query(PrefectTargetRegistry).filter_by(brand=brand).first()
-            if registry_row:
-                registry_row.config_path = config_path
-                registry_row.enabled = True
-                registry_row.registered_by = user_id
-                logger.info("Updated prefect_target_registry for brand=%s", brand)
-            else:
-                session.add(PrefectTargetRegistry(
-                    brand=brand,
-                    config_path=config_path,
-                    enabled=True,
-                    registered_by=user_id,
-                ))
-                logger.info("Inserted prefect_target_registry for brand=%s", brand)
-
-            # 3c. INSERT INTO agent_audit_log
-            session.add(AgentAuditLog(
+        # 3b. INSERT INTO prefect_target_registry (UPSERT by brand)
+        registry_row = session.query(PrefectTargetRegistry).filter_by(brand=brand).first()
+        if registry_row:
+            registry_row.config_path = config_path
+            registry_row.enabled = True
+            registry_row.registered_by = user_id
+            logger.info("Updated prefect_target_registry for brand=%s", brand)
+        else:
+            session.add(PrefectTargetRegistry(
                 brand=brand,
-                user_id=user_id,
-                action="approve",
-                details={
-                    "confidence_score": validation_report.confidence_score,
-                    "recommendation": validation_report.recommendation,
-                    "config_path": config_path,
-                },
+                config_path=config_path,
+                enabled=True,
+                registered_by=user_id,
             ))
-            logger.info("Inserted agent_audit_log for brand=%s user=%s", brand, user_id)
+            logger.info("Inserted prefect_target_registry for brand=%s", brand)
 
+        # 3c. INSERT INTO agent_audit_log
+        session.add(AgentAuditLog(
+            brand=brand,
+            user_id=user_id,
+            action="approve",
+            details={
+                "confidence_score": validation_report.confidence_score,
+                "recommendation": validation_report.recommendation,
+                "config_path": config_path,
+            },
+        ))
+        logger.info("Inserted agent_audit_log for brand=%s user=%s", brand, user_id)
+
+        session.commit()
         logger.info("Atomic DB transaction committed for brand=%s", brand)
 
     except Exception as exc:
+        session.rollback()
         logger.exception(
             "Atomic DB transaction failed for brand=%s — all changes rolled back: %s",
             brand, exc,
@@ -160,8 +174,7 @@ def run_registration(state: AgentState) -> AgentState:
         state.error = f"DB registration failed: {exc}"
         return state
     finally:
-        # Session is already closed by context manager on commit/rollback
-        pass
+        session.close()
 
     # ── 4. Write agent_run_outcomes (non-critical) ─────────────────────────────
     try:

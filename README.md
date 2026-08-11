@@ -1,468 +1,337 @@
-# Autonomous Scraping Agent
+# Myer Retail Competitive Intelligence Platform
 
-An autonomous agent system designed to dynamically explore competitor websites, analyze layouts, evaluate anti-bot protections, identify visual promotional areas, determine optimal CSS extraction strategies, validate scrapers in a Docker sandbox, register approved configurations, and surface pending decisions to a human operator for review.
-
-The system is built on **LangGraph** to orchestrate step-by-step agent executions, using **Playwright** for browser automation, **LiteLLM** for Claude model access, direct **Gemini** API fallbacks, and a **Streamlit** operator workspace for human-in-the-loop approvals.
+A production-grade, concurrent hybrid competitive intelligence system with **Autonomous Scraper Agent orchestration**. The platform automatically discovers, builds, validates, and registers brand scraper configurations via a **LangGraph agent pipeline**, executes scrapers inside an isolated **Docker Sandbox container**, routes offers into business team feeds via a configurable policy engine, deduplicates by source page, and stores clean promotion rows in PostgreSQL for dashboard review.
 
 ---
 
-## Agentic Architecture
-
-The autonomous pipeline is represented as a state graph coordinated by a LangGraph orchestrator:
+## System Architecture
 
 ```text
-       [START]
-          │
-          ▼
-   ┌─────────────┐
-   │ Exploration │  ◄── visits site, scores anti-bot, analyzes layout & DOM
-   └─────────────┘
-          │
-          ▼
-   ┌─────────────┐
-   │ Generation  │  ◄── generates HybridPromoExtractor config, saves to config/targets/
-   └─────────────┘
-          │
-          ▼
-   ┌─────────────┐
-   │ Validation  │  ◄── runs scraper in Docker sandbox, validates schema, scores confidence
-   └─────────────┘
-          │
-      Conditional Routing (confidence score & sandbox violations)
-      ┌───┼─────────────┐
-      │   │             │
-      │   │             ▼
-      │   │          [END]   ← score < 70 or any sandbox violation → Rejected
-      │   │
-      │   ▼
-      │  [END]   ← score 70–89 → Pending Human Review (Streamlit UI)
-      │
-      ▼
-   ┌──────────────┐
-   │ Registration │ ◄── registers verified config (score ≥ 90 → Auto-Approved)
-   └──────────────┘
-          │
-          ▼
-        [END]
+AUTONOMOUS AGENT LAYER — LangGraph Scraper Generation & Validation
+  - Site Exploration: Navigates target URL, captures DOM/screenshots, measures anti-bot risk
+  - Target Config Generation: Generates custom CSS selectors, delays, and category hints
+  - Sandbox Validation: Executes scraper inside isolated Docker container with egress filtering
+  - Confidence Scoring: Evaluates schema validity, offer yield, and selector accuracy (0-100)
+  - Registration & Audit: Atomically updates DB target registry and logs immutable audit trail
+
+        ↓
+
+BRONZE LAYER — Dynamic browser & anti-bot scraping
+  - Parallel Playwright headless scraping via config/targets/*.json
+  - Multi-tier AntiBotBypassService (Playwright Stealth → httpx → curl_cffi TLS impersonation)
+  - Bypasses PerimeterX / HUMAN Security and Cloudflare Managed Challenges (Turnstile / 403 / 429)
+  - Text extraction from configured CSS selectors
+  - Screenshot/image extraction for banner-like promotional elements
+  - Vision LLM extraction for image-based offers
+
+        ↓
+
+SILVER LAYER — PostgreSQL storage & Health Monitoring
+  - LLM category assignment from env-driven category taxonomy
+  - URL-aware deduplication: source + brand + source_url + offer_title
+  - Stores offer title, category, brand, source URL, confidence, timestamps
+  - Continuous Health Check agent monitors active targets for decay or selector drift
+
+        ↓
+
+ROUTING LAYER — Team Policy Engine
+  - config/teams.json defines which categories and brands route to which team
+  - TeamPolicyEngine evaluates each promotion and writes to promotion_team_assignments
+  - Supports allowlists, denylists, regional suffix normalisation
+
+        ↓
+
+GOLD LAYER — Streamlit Intelligence & Approval Dashboard
+  - Human-in-the-loop Approval UI: Review pending agent configurations, dry-run tests, and audit logs
+  - Team-wise and category-wise promotional feeds
+  - Weekly competitor matrix by team, brand, and day of week
+  - Filters by team, category, brand, date, and extraction source
 ```
-
-### Agent Nodes & Responsibilities
-
-1. **Exploration Agent** (`agent/exploration_agent.py`) — **fully implemented**:
-   - Opens target site headlessly with stealth flags, custom headers, and webdriver detection blocks.
-   - Evaluates page height, triggers dynamic scroll actions to bypass lazy loading, and resets scroll.
-   - Computes an **anti-bot risk score** based on DOM presence of security elements (CAPTCHA, Cloudflare, etc.) and response headers.
-   - Cleans non-semantic HTML tags (`<script>`, `<style>`, `<head>`, `<svg>`) to generate a truncated DOM.
-   - Uses multimodal models (LiteLLM Claude falling back to direct Gemini) to identify visual promotional areas from pre/post-scroll screenshots.
-   - Evaluates cleaned DOM alongside visual analysis to recommend extraction strategy and CSS selectors.
-
-2. **Generation Agent** (`agent/generation_agent.py`) — **fully implemented**:
-   - Generates target configs matching the exploration recommendations.
-   - Saves config to `config/targets/<brand>.json` in `HybridPromoExtractor`-compatible format.
-   - Sets `state.status = "generated"` on success.
-
-3. **Validation Agent** (`agent/validation_agent.py`) — **fully implemented**:
-   - Runs the generated scraper inside the Docker sandbox via `sandbox_runner.run_scraper_in_sandbox()`.
-   - If sandbox violations are detected, immediately forces `confidence_score=0`, `recommendation="reject"`.
-   - Parses offer data from container stdout, validates each offer against the schema.
-   - Computes a **confidence score** (0–100+) using yield rate, schema quality, field-population rates, and anti-bot risk penalty.
-   - Selects up to 3 sample offers for human preview.
-   - **Writes every validation run to `agent_run_outcomes`** (including `sample_offers`, `schema_errors`, `issues`, and `sandbox_violations` inside the JSONB `score_breakdown`) so the operator workspace can display the full picture.
-   - Populates `state.validation_report` (`ValidationReport`) and sets `state.status = "validation"`.
-
-4. **Registration Agent** (`agent/registration_agent.py`) — **fully implemented**:
-   - Atomically UPSERTs the `competitors` row, inserts `prefect_target_registry`, and inserts `agent_audit_log` in a single `session.begin()` block (all three roll back together on failure).
-   - Writes a separate, non-critical `agent_run_outcomes` row with `was_auto_approved=True`.
-   - Reads the active operator identity via `auth.approval_rbac.get_current_user()` (reads `AGENT_USER_ID` env var, falls back to `"default_operator"`).
 
 ---
 
-## Operator Workspace (Streamlit)
+## Autonomous Scraper Agent & Sandbox Execution
 
-`dashboard/approval_ui.py` provides a premium-styled operator dashboard with four tabs:
+The platform includes an end-to-end **LangGraph Autonomous Agent** that builds and verifies scrapers for new retail sites without human manual coding:
 
-### Tab 1 — Pending Approvals Queue
-- Surfaces all `agent_run_outcomes` rows with `recommendation = 'pending'` that have not yet been acted on (CTE-based deduplication by brand + audit log timestamp).
-- Side-by-side layout: editable JSON config on the left, full validation outcome details on the right (score badge, score breakdown, warnings/schema errors, sample offers dataframe).
-- **Approve**: calls `run_registration()` atomically, then marks the pending outcome row as resolved.
-- **Reject**: writes a `reject` audit event with operator comment, marks the outcome row as resolved.
+### 1. Agent Workflow Nodes (`agent/`)
+- **Site Exploration (`exploration_agent.py`)**: Navigates target URLs, detects anti-bot challenges (PerimeterX, Cloudflare), inspects DOM structure, and takes high-resolution screenshots.
+- **Config & Scraper Generation (`generation_agent.py`)**: Generates optimized JSON target configurations (`config/targets/<brand>.json`) with custom CSS text selectors, screenshot selectors, and category hints.
+- **Sandbox Validation (`validation_agent.py`)**: Executes generated scraper code inside a single-use Docker container, enforcing strict time limits (default: 240s) and isolation. Calculates a **Confidence Score (0–100)**.
+- **Self-Healing Repair Loop (`repair_agent.py`)**: If validation fails or yields 0 offers, the repair agent analyzes container error logs and rewrites selector patterns (up to 3 retry loops).
+- **Registration & Audit (`registration_agent.py`)**: Auto-approves configurations with confidence ≥ 80, updating `competitors`, `prefect_target_registry`, and writing an immutable entry to `agent_audit_log`.
 
-### Tab 2 — Active Registry
-- Lists all `prefect_target_registry` entries with config path, registering user, and timestamp.
-- Enable/Disable toggle — atomically updates both `prefect_target_registry.enabled` and `competitors.enabled`, writes an audit event.
+### 2. Docker Sandbox Security (`agent/sandbox_runner.py` & `Dockerfile.sandbox`)
+- **Network Egress Isolation**: Runs container on `scraper-egress-only` Docker network, blocking non-essential outbound traffic.
+- **LiteLLM Offline Configuration**: Configured with `LITELLM_LOCAL_MODEL_COST_MAP=True` to prevent container stalls from remote GitHub cost-map fetches.
+- **Socket & Timeout Protection**: Socket HTTP timeout extended to `timeout_seconds + 30` with explicit container cleanup on completion or failure.
 
-### Tab 3 — Audit Trail Log
-- Paginated (25 rows/page) with action-type filter.
-- Expandable JSON panels show the full `details` JSONB (confidence score, rejection reasons, config diffs).
+---
 
-### Tab 4 — Trigger Exploration Agent
-- Allows operators to add and test target websites completely from the browser UI (no CLI needed).
-- Includes inputs for **Brand Name**, **Target URL**, and optional **Extraction Requirements**.
-- Runs the autonomous agent state graph (explore, generate config, run containerized sandbox validation) with live UI status notifications.
+## Human-in-the-Loop Approval UI
 
-### Running the workspace
+The Streamlit dashboard includes a dedicated **Agent Approval UI** (`dashboard/approval_ui.py`):
+
+- **Pending Review Feed**: Shows generated configurations requiring human sign-off (confidence < 80).
+- **Dry-Run Validation**: Test scrapers interactively before committing them to production.
+- **Config Editor**: Edit target JSON selectors directly in the UI with instant JSON syntax validation.
+- **Audit Log Viewer**: Full historical audit trail tracking user approvals, rejections, and manual overrides.
+
+---
+
+## Extraction Approach
+
+The scraper uses a hybrid extraction strategy with automated anti-bot bypass:
+
+- **Anti-Bot Bypass Architecture (`AntiBotBypassService`)** — Bypasses bot verification screens (Cloudflare Managed Challenges, Turnstile, PerimeterX v2, `local_rate_limited` stubs) by executing a multi-tier fallback cascade. When headless browsers encounter rate limits or 403 blocks, `AntiBotBypassService` uses `curl_cffi` to execute authentic Chrome/Firefox TLS Client Hello (JA3/JA4) impersonation, retrieving the full page DOM.
+- **Text extraction** collects visible promotional text from configured CSS selectors.
+- **Screenshot/image extraction** captures banner-like page elements and sends them to the configured vision LLM.
+- **LLM category classification** runs once per brand scrape as a batched text call. It assigns each extracted offer to one category from the environment-driven taxonomy.
+- **Category fallback override** — if the LLM assigns "Others" but the target config declares a top-level `category` field (e.g. `"category": "Beauty"`), the system overrides the LLM's choice. This ensures brand-specific target configs always produce the correct category.
+- **URL-aware deduplication** keeps identical promo text separate when it appears on different pages, such as `/men/` and `/kids/`.
+
+Categories are configured in `.env`:
+
+```env
+PROMO_CATEGORIES="Home, Entertainment, Womens, Beauty, Kids, Toys, Menswear, Footwear, Others"
+```
+
+---
+
+## Team Routing
+
+Business team routing is controlled by `config/teams.json`. This is completely separate from scraping — it is applied after promotions are stored in the database.
+
+### How it works
+
+1. Each promotion has an LLM-assigned `category` and a `brand`.
+2. `TeamPolicyEngine` reads `teams.json` and evaluates each promotion against:
+   - **`categories`** — the promotion's category must match one in the team's list.
+   - **`allowed_brands`** — if specified, the promotion's brand must be in this list.
+   - **`excluded_brands`** — if specified, the promotion's brand must NOT be in this list.
+3. Matching team IDs are written to the `promotion_team_assignments` table.
+4. A promotion can belong to multiple teams.
+
+### Current team configuration
+
+| Team | Team ID | Categories |
+|---|---|---|
+| Womens (WIFA) | `womens_wifa` | Womens |
+| Kids & Toys | `kids_toys_team` | Kids, Toys |
+| Toys | `toys_team` | Toys |
+| Menswear | `menswear_team` | Menswear, Others |
+| Entertainment | `entertainment_team` | Entertainment |
+| Beauty | `beauty_team` | Beauty |
+| Home | `home_team` | Home |
+
+### Updating team rules (no re-scrape needed)
+
+After editing `config/teams.json`, re-apply routing to all existing promotions:
+
 ```bash
-export AGENT_USER_ID=your.name@company.com
-../env/bin/streamlit run dashboard/approval_ui.py
+python scripts/reassign_teams.py
 ```
 
 ---
 
-## Setup & Initialization
+## Database Schema
 
-### 1. Requirements
-- Python 3.10+
-- PostgreSQL database (see `.env` for `DATABASE_URL`)
-- Google Gemini API Key
-- LiteLLM Gateway / Corporate API Access (optional; falls back to direct Gemini API)
-- **Docker Desktop** (for sandbox execution — see [Docker Setup](#docker-setup--sandbox-infrastructure) below)
+The system uses **6 core PostgreSQL tables**:
 
-### 2. Installation
-Clone the repository, initialize your virtual environment, and install dependencies:
+### 1. `competitors` table
+Tracks competitor brands and agent generation metadata.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | int PK | Primary key |
+| `name` | text unique | Brand/competitor name |
+| `enabled` | bool | Active scraping flag |
+| `added_at` | timestamp | Creation timestamp |
+| `modified_at` | timestamp | Last update timestamp |
+| `extraction_strategy` | text | `hybrid`, `text`, or `image` |
+| `agent_generated` | bool | True if created by autonomous agent |
+| `agent_confidence` | int | Agent validation confidence score (0-100) |
+| `agent_notes` | text | Diagnostic notes from validation agent |
+| `source_url` | text | Main website URL |
+
+### 2. `promotions` table
+Stores scraped promotional offers.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | int PK | Primary key |
+| `competitor_id` | int FK | References competitors |
+| `brand` | text | Denormalised brand name |
+| `offer_title` | text | Promotional headline |
+| `category` | text | LLM-assigned category |
+| `source_name` | text | Extractor type: `text_scraper` or `image_promo` |
+| `source_url` | text | Exact page URL scraped |
+| `extraction_confidence` | text | `high`, `medium`, or `low` |
+| `offer_hash` | text | SHA-256 fingerprint for deduplication |
+| `scraped_at` | timestamp | Latest scrape time |
+| `created_at` | timestamp | Row insertion time |
+
+### 3. `promotion_team_assignments` table
+Junction table linking promotions to business teams.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | int PK | Primary key |
+| `promotion_id` | int FK | References promotions |
+| `team_id` | text | Team identifier from teams.json |
+| `assigned_at` | timestamp | Assignment timestamp |
+
+### 4. `prefect_target_registry` table
+Active Prefect target registry for registered scrapers.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | int PK | Primary key |
+| `brand` | text unique | Target brand name |
+| `config_path` | text | Path to target JSON config |
+| `enabled` | bool | Active flag |
+| `registered_at` | timestamp | Registration timestamp |
+| `registered_by` | text | User ID / Agent identifier |
+
+### 5. `agent_audit_log` table
+Immutable audit trail for agent actions and approvals.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | int PK | Primary key |
+| `brand` | text | Brand identifier |
+| `user_id` | text | User or agent ID |
+| `action` | text | `trigger_run`, `approve`, `reject`, `edit_config` |
+| `details` | jsonb | Configuration diff or rejection reason |
+| `created_at` | timestamp | Action timestamp |
+
+### 6. `agent_run_outcomes` table
+Records historical outcome and confidence metrics for health checks.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | int PK | Primary key |
+| `brand` | text | Competitor brand |
+| `run_type` | text | `initial_validation` or `health_check` |
+| `confidence_score` | int | Confidence score (0-100) |
+| `score_breakdown` | jsonb | Detailed metric scoring |
+| `recommendation` | text | `auto_approve`, `review`, or `reject` |
+| `offers_extracted` | int | Number of extracted offers |
+| `was_auto_approved` | bool | Auto-approval status |
+| `checked_at` | timestamp | Check timestamp |
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| Agent Orchestration | LangGraph Python |
+| Container Isolation | Docker (Playwright + Python) |
+| Browser Automation | Playwright Python + AntiBotBypassService (`curl_cffi` TLS) |
+| Vision / Text LLM | LiteLLM gateway / Groq / Gemini |
+| Database | PostgreSQL + SQLAlchemy |
+| Orchestration | Prefect |
+| Dashboard | Streamlit |
+
+---
+
+## Project Structure
+
+```text
+.
+├── agent/                                  # LangGraph Autonomous Scraper Agent
+│   ├── models.py                          # Agent state schemas (AgentState, ValidationReport)
+│   ├── orchestrator.py                    # LangGraph state graph builder
+│   ├── exploration_agent.py              # Site exploration & anti-bot risk analysis
+│   ├── generation_agent.py               # Selector & target config generator
+│   ├── validation_agent.py               # Validation scoring & verification
+│   ├── sandbox_runner.py                 # Docker sandbox executor
+│   ├── repair_agent.py                   # Self-healing selector repair loop
+│   └── registration_agent.py             # Atomic DB registration & audit logging
+├── config/
+│   ├── teams.json                         # Business team routing rules
+│   └── targets/                           # Per-brand scrape configuration (one JSON per brand)
+├── database/
+│   ├── connection.py                      # SQLAlchemy engine/session setup
+│   └── models.py                          # ORM models: Competitor, Promotion, Audit Logs, Registry
+├── dashboard/
+│   ├── app.py                             # Streamlit dashboard entrypoint
+│   ├── approval_ui.py                     # Human-in-the-loop Approval & Audit UI
+│   └── utils/                             # DB helpers, Excel exporter, styling
+├── Dockerfile.sandbox                      # Isolated sandbox container image definition
+├── flows/
+│   └── master_pipeline.py                 # Prefect flow for parallel scraping & retry passes
+├── promo_scraper/
+│   ├── hybrid_promo_extractor.py          # Core extraction, LLM calls, deduplication
+│   └── anti_bot_service.py                # Multi-tier TLS & browser bypass
+├── scripts/
+│   ├── run_scraper_agent.py               # CLI entrypoint for autonomous scraper agent
+│   ├── run_health_check.py                # Scraper decay & health monitoring agent
+│   ├── init_db.py                         # Initialize database tables and schema migrations
+│   ├── reset_db.py                        # Truncate tables (with optional --keep-registry flag)
+│   ├── run_hybrid_promo_scraper.py        # Run single target scrape
+│   └── reassign_teams.py                  # Re-apply team routing rules
+├── tests/                                 # Pytest test suite (29 tests)
+│   ├── test_team_policy_engine.py
+│   ├── test_exporter.py
+│   └── agent/                             # Agent & sandbox test suite
+├── requirements.txt
+├── .env.example                           # Environment configuration template
+└── .env                                   # Local configuration and credentials
+```
+
+---
+
+## Quickstart
+
+### 1. Install Dependencies & Build Sandbox Image
 
 ```bash
 python -m venv env
 source env/bin/activate
-
 pip install -r requirements.txt
+playwright install
 
-# Install Playwright browser binaries
-playwright install chromium
+# Build the Docker Sandbox image for agent validation
+docker build -t scraper-sandbox:latest -f Dockerfile.sandbox .
 ```
 
-### 3. Environment Configuration
-Create a `.env` file in the project root:
-
-```env
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/autonomous_agentic_scraping
-
-# LiteLLM Configuration (Primary)
-LITELLM_API_KEY=your_litellm_api_key
-LITELLM_API_BASE=https://your-litellm-gateway.example/v1
-LLM_MODEL=openai/claude-haiku-4.5
-VISION_LLM_MODEL=openai/claude-haiku-4.5
-
-# Direct Gemini Fallback Configuration
-GEMINI_API_KEY=your_gemini_api_key
-
-# Promotion categories for HybridPromoExtractor
-PROMO_CATEGORIES="Home, Entertainment, Womens, Beauty, Kids, Toys, Menswear, Footwear, Null"
-
-# Operator identity (written to all audit log rows)
-AGENT_USER_ID=your.name@company.com
-```
-
-### 4. Database Setup
-
-Apply all Alembic migrations to provision the full schema:
+### 2. Initialize Database
 
 ```bash
-# Confirm current migration head (should be t6d004000004):
-../env/bin/alembic current
-
-# Apply all migrations (idempotent — safe to re-run):
-../env/bin/alembic upgrade head
+python scripts/init_db.py
 ```
 
-#### Tables created by migrations
+### 3. Run Autonomous Agent for New Brand
 
-| Table | Migration | Purpose |
-|---|---|---|
-| `competitors` | base + Task 6C | Brand registry with agent-generated metadata columns |
-| `promotions` | base | Scraped offer rows |
-| `agent_run_outcomes` | Task 6A (`t6a001000001`) | Validation run history, confidence scores, JSONB breakdown |
-| `agent_audit_log` | Task 6B (`t6b002000002`) | Immutable operator action log |
-| `prefect_target_registry` | Task 6D (`t6d004000004`) | Active targets registered for Prefect execution |
-
----
-
-## Docker Setup & Sandbox Infrastructure
-
-The **Docker sandbox** runs every generated scraper in an isolated, resource-capped container before validation. This prevents malicious or runaway AI-generated code from affecting the host machine.
-
-### What the sandbox enforces
-
-| Constraint | Value |
-|---|---|
-| Max RAM | 512 MB (OOM kill if exceeded) |
-| Max CPU | 1 core |
-| Max processes | 64 (prevents fork bombs) |
-| Filesystem | Read-only (only `/tmp` is writable, max 64 MB) |
-| Network | Egress-filtered Docker bridge network |
-| Capabilities | All Linux capabilities dropped |
-
-### Prerequisites
-- **Docker Desktop** installed ([download](https://www.docker.com/products/docker-desktop/))
-- Docker version ≥ 20.10
-
-### Step 1 — Start Docker Desktop
+To discover, build, and register a new competitor brand automatically:
 
 ```bash
-systemctl --user start docker-desktop
+python scripts/run_scraper_agent.py --url "https://www.vanheusen.com.au/" --brand "Van Heusen"
 ```
 
-> Run once per login session. To check it's running: `docker info`
-
-### Step 2 — Build the sandbox image
-
-Run from the **repository root**:
+### 4. Run Scraper Pipeline
 
 ```bash
-docker build -f docker/Dockerfile.sandbox -t promo-scraper-sandbox:latest .
+python flows/master_pipeline.py
 ```
 
-> The build context must be the repo root — `COPY promo_scraper/` and `COPY agent/sandbox_entrypoint.py` resolve relative to it.
-
-### Step 3 — Create the egress network
+### 5. Launch Dashboard & Approval UI
 
 ```bash
-# Without iptables (Docker Desktop — internal bridge only):
-docker network create \
-  --driver bridge \
-  --subnet 172.28.0.0/16 \
-  --internal \
-  scraper-egress-only
-
-# With iptables (Linux Docker Engine — requires sudo):
-sudo ./docker/setup_egress_network.sh create <target-domain>
-# Example:
-sudo ./docker/setup_egress_network.sh create www.vanheusen.com.au
+streamlit run dashboard/app.py
 ```
 
-To tear down:
-```bash
-docker network rm scraper-egress-only
-# or: sudo ./docker/setup_egress_network.sh teardown
-```
-
-> **Note:** The network persists until explicitly removed or Docker Desktop restarts.
+Open [http://localhost:8501](http://localhost:8501) to view promotional feeds and manage pending agent approvals.
 
 ---
 
-## Running the Tests
+## Running Tests
 
-All test scripts exit 0 on success and print a per-check result table.
+Run the full pytest suite (29 tests):
 
 ```bash
-# Validation agent (mocked sandbox, no Docker required) — 25 checks
-../env/bin/python agent/test_validation.py
-
-# Registration agent (real DB required) — 20 checks
-../env/bin/python agent/test_registration.py
-
-# Orchestrator routing + generation agent unit tests (no Docker, no DB) — 5 tests
-../env/bin/python agent/test_orchestrator.py
-
-# Approval UI database callbacks (real DB required) — 19 checks
-../env/bin/python dashboard/test_approval_ui.py
-
-# Sandbox violation detection (requires Docker running) — 3 tests
-../env/bin/python agent/test_sandbox.py
-
-# Health check agent (real DB required) — 26 checks
-../env/bin/python scripts/test_health_check.py
+pytest
 ```
 
-### Full test suite
-
-```
-agent/test_orchestrator.py      →  5/5  tests  ✓  exit 0
-agent/test_validation.py        → 25/25 checks ✓  exit 0
-agent/test_registration.py      → 20/20 checks ✓  exit 0
-dashboard/test_approval_ui.py   → 19/19 checks ✓  exit 0
-agent/test_sandbox.py           →  3/3  tests  ✓  exit 0  (requires Docker)
-scripts/test_health_check.py    → 26/26 checks ✓  exit 0
-```
-
----
-
-## Confidence Scoring (Validation Agent)
-
-The validation agent computes a confidence score (0–100+) that determines the routing outcome:
-
-| Score band | Routing | Meaning |
-|---|---|---|
-| ≥ 90 | `auto_approve` → Registration | Scraper meets quality bar; config activated automatically |
-| 70–89 | `pending` → Streamlit UI | Human review required before activation |
-| < 70 | `reject` → END | Config discarded; re-exploration recommended |
-| Any violation | `reject` (score forced to 0) | Sandbox security breach; instant discard |
-
-### Scoring breakdown
-
-| Component | Condition | Δ Score |
-|---|---|---|
-| Base (yield ≥ 5 offers or yield_rate ≥ 80%) | `offers_extracted ≥ 5` or `offers / estimated ≥ 0.8` | +70 |
-| Base (yield ≥ 1 offer) | At least 1 offer returned | +50 |
-| Base (yield = 0) | No offers found | +10 |
-| Schema 100% valid | All offers pass schema check | +20 |
-| Schema ≥ 80% valid | | +10 |
-| Title populated (all) | `title` non-empty on 100% of offers | +5 |
-| Category populated (≥ 80%) | `category` not None on ≥ 80% | +5 |
-| Discount populated (≥ 50%) | `discount_min` not None on ≥ 50% | +5 |
-| Anti-bot: high risk | `anti_bot_risk == "high"` | −20 |
-| Anti-bot: medium risk | `anti_bot_risk == "medium"` | −5 |
-| **Sandbox violation override** | Any violation in result | **= 0** |
-
-The full per-term breakdown is stored in `ValidationReport.score_breakdown` (and persisted in `agent_run_outcomes.score_breakdown` JSONB) for display in the operator workspace.
-
----
-
-## Health Check Agent
-
-`scripts/run_health_check.py` monitors all enabled targets registered in `prefect_target_registry` and flags unhealthy scrapers based on recent scrape-run outcomes.
-
-### What it detects
-
-| Alert Type | Condition | `still_healthy_at_check` |
-|---|---|---|
-| Zero-yield collapse | All 3 recent runs returned 0 offers | `False` |
-| High schema failure rate | Average `schema_valid_pct` < 50% across 3 runs | `False` |
-| Data gap | No outcome rows yet for a newly registered target | `True` (no data) |
-| Healthy | Recent yields > 0 and schema quality acceptable | `True` |
-
-### Running the health check
-
-```bash
-# Run standalone (from the project root):
-../env/bin/python scripts/run_health_check.py
-
-# Exit codes:
-#   0 — all targets healthy (or no targets registered)
-#   1 — one or more targets flagged as unhealthy
-#   2 — fatal error (DB connection failure)
-```
-
-### Output
-
-Every check writes a new `agent_run_outcomes` row with `run_type="health_check"` and `still_healthy_at_check=True|False`. The `score_breakdown` JSONB stores:
-- `unhealthy_reason` — `"zero_yield"` | `"high_schema_failure_rate"` | `null`
-- `recent_yield_counts` — list of offer counts from the 3 inspected runs
-- `recent_schema_valid_pcts` — list of schema validity percentages per run
-- `days_since_registration` — age of the target's registry entry
-
-### Automated repair (deferred)
-
-Detection is the scope of Task 8. Automated repair (re-exploration + selector patching) is left as a `TODO` in `run_health_check.py` with a descriptive comment pointing to `agent/repair_agent.py` (Appendix A of `docs/implementation_plan.md`).
-
----
-
-## Key Files
-
-### Core Agent Pipeline
-
-| File | Purpose |
-|---|---|
-| `agent/models.py` | `AgentState`, `SiteAnalysis`, `GeneratedArtifacts`, `ValidationReport` Pydantic models |
-| `agent/orchestrator.py` | LangGraph graph definition; wires all agent nodes and conditional routing |
-| `agent/exploration_agent.py` | Live Playwright browser, anti-bot scoring, Gemini vision analysis |
-| `agent/generation_agent.py` | LLM config generator; saves `config/targets/<brand>.json` |
-| `agent/validation_agent.py` | Sandbox execution, schema validation, confidence scoring, DB persistence |
-| `agent/registration_agent.py` | Atomic DB registration: competitors UPSERT + registry + audit log |
-| `agent/prompts.py` | All LLM prompt constants |
-| `auth/approval_rbac.py` | `AgentRole` enum + `get_current_user()` (reads `AGENT_USER_ID` env var) |
-
-### Operator Workspace
-
-| File | Purpose |
-|---|---|
-| `dashboard/approval_ui.py` | Streamlit human-in-the-loop workspace (3 tabs: pending queue, registry, audit log) |
-| `dashboard/app.py` | Existing promotions matrix and timeline monitoring dashboard |
-| `dashboard/utils/styles.py` | Shared CSS design system (Inter font, KPI cards, badges) |
-
-### Sandbox Infrastructure
-
-| File | Purpose |
-|---|---|
-| `docker/Dockerfile.sandbox` | Minimal Python 3.12 image with Playwright + scraper dependencies |
-| `docker/setup_egress_network.sh` | Creates/tears down the egress-filtered Docker network |
-| `agent/sandbox_entrypoint.py` | Runs **inside** the container; reads config from env vars, executes scraper |
-| `agent/sandbox_runner.py` | Host-side: creates container, enforces limits, detects violations |
-
-### Database
-
-| File | Purpose |
-|---|---|
-| `database/models.py` | All SQLAlchemy models: `Competitor`, `Promotion`, `AgentRunOutcome`, `AgentAuditLog`, `PrefectTargetRegistry` |
-| `database/connection.py` | `get_session()`, `init_db()` |
-| `alembic/versions/` | Migration chain (`t6a001000001` → `t6b002000002` → `t6c003000003` → `t6d004000004`) |
-
-### Scripts
-
-| File | Purpose |
-|---|---|
-| `scripts/run_hybrid_promo_scraper.py` | DB-first target loader + HybridPromoExtractor runner |
-| `scripts/run_scraper_agent.py` | CLI entry point: explore → generate → validate → register |
-| `scripts/run_health_check.py` | **Health check agent** — monitors active targets, logs outcomes |
-
-### Tests
-
-| File | Checks | Docker needed? | DB needed? |
-|---|---|---|---|
-| `agent/test_validation.py` | 25 | No | No |
-| `agent/test_orchestrator.py` | 5 | No | No |
-| `agent/test_registration.py` | 20 | No | **Yes** |
-| `dashboard/test_approval_ui.py` | 19 | No | **Yes** |
-| `agent/test_sandbox.py` | 3 | **Yes** | No |
-| `scripts/test_health_check.py` | 26 | No | **Yes** |
-
-### Documentation
-
-| File | Contents |
-|---|---|
-| `docs/HANDOFF_TASK_8.md` | **Task 8 final summary** — health check architecture, full project checklist, fast-follow items |
-| `docs/HANDOFF_TASK_7.md` | Task 7 summary, 4-tab Streamlit approval workspace design decisions |
-| `docs/HANDOFF_TASK_6.md` | Task 6 summary, migration chain, DB-first `load_targets()` design, auth hooks |
-| `docs/HANDOFF_TASK_5.md` | Task 5 summary, per-scenario `ValidationReport` shapes, sandbox API contract |
-| `docs/HANDOFF_TASK_4.md` | Sandbox infrastructure setup, `sandbox_runner` API contract |
-| `docs/task_breakdown.md` | Full task breakdown and dependency order (Tasks 0–8) |
-| `docs/implementation_plan.md` | Full system design and scoring specification |
-
----
-
-## Sandbox Violation Types
-
-Returned by `sandbox_runner.run_scraper_in_sandbox()` in the `violations` list:
-
-| Violation | Trigger | Meaning |
-|---|---|---|
-| `oom_kill` | Exit code 137 | Container killed by kernel — exceeded 512 MB RAM |
-| `filesystem_violation` | EROFS in logs | Tried to write outside `/tmp` |
-| `network_violation` | Connection error in logs | Tried to reach a blocked host |
-| `nonzero_exit` | Any other non-zero exit | Generic scraper failure |
-| `timeout_or_crash` | Docker API error / timeout | Container failed to start or timed out |
-
-Any non-empty `violations` list → `confidence_score = 0`, `recommendation = "reject"`.
-
----
-
-## Target Registry & `load_targets()` Priority
-
-`scripts/run_hybrid_promo_scraper.py::load_targets()` follows this priority chain:
-
-```
-1. If --target flag given → load that single file (unchanged)
-2. Query prefect_target_registry WHERE enabled=TRUE
-   ├── If rows found → load each config_path file
-   │     └── Also append filesystem configs NOT already in the registry
-   └── If empty or DB unavailable → fall back to filesystem glob
-3. _load_filesystem_targets() → glob config/targets/*.json (original behaviour)
-```
-
-Filesystem fallback is always intact — if the DB is down or the registry is empty, `load_targets()` silently falls back to the glob scan.
-
----
-
-## Task Status
-
-| Task | Status | Description |
-|---|---|---|
-| Task 0 | ✅ Done | Repo orientation — ground truth schema, config shapes, DB setup |
-| Task 1 | ✅ Done | `agent/` package scaffold, Pydantic models, LangGraph skeleton |
-| Task 2 | ✅ Done | Exploration agent (Playwright + Gemini vision + anti-bot scoring) |
-| Task 3 | ✅ Done | Generation agent (LLM config generator, saves `config/targets/`) |
-| Task 4 | ✅ Done | Docker sandbox infrastructure (Dockerfile, network, sandbox runner) |
-| Task 5 | ✅ Done | Validation agent (sandbox execution, schema validation, confidence scoring) |
-| Task 6 | ✅ Done | Auth hooks + atomic DB registration + DB-first target loader |
-| Task 7 | ✅ Done | Streamlit human-in-the-loop operator workspace (4-tab approval workspace) |
-| Task 8 | ✅ Done | Health check agent (`scripts/run_health_check.py`) — monitors active targets, logs detection outcomes |

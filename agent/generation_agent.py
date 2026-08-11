@@ -165,6 +165,7 @@ def generate_scraper_config(state: AgentState) -> AgentState:
     prompt_text = CONFIG_GENERATION_PROMPT.format(
         url=site_analysis.url,
         brand=site_analysis.brand,
+        category_hint=getattr(site_analysis, "category_hint", "") or "",
         extraction_strategy=site_analysis.extraction_strategy,
         visual_summary=site_analysis.gemini_visual_summary,
         promo_areas=json.dumps(site_analysis.promo_areas_identified, indent=2),
@@ -210,7 +211,32 @@ def generate_scraper_config(state: AgentState) -> AgentState:
 
         # Ensure all standard config fields are present and cleaned
         config_json["brand"] = config_json.get("brand") or site_analysis.brand
-        config_json["source_url"] = config_json.get("source_url") or site_analysis.url
+
+        # ── A1: Normalise source_url to the array-of-objects format ──────────────
+        # HybridPromoExtractor always expects:
+        #   [{"url": "...", "category_hint": "..."}]
+        # The LLM should produce this shape now, but we defensively normalise
+        # any legacy plain-string or bare-dict responses here.
+        raw_source_url = config_json.get("source_url") or site_analysis.url
+        category_hint  = getattr(site_analysis, "category_hint", "") or ""
+
+        if isinstance(raw_source_url, str):
+            # Plain string → wrap into expected format
+            config_json["source_url"] = [{"url": raw_source_url, "category_hint": category_hint}]
+        elif isinstance(raw_source_url, dict):
+            # Single object dict → wrap in list
+            if "category_hint" not in raw_source_url:
+                raw_source_url["category_hint"] = category_hint
+            config_json["source_url"] = [raw_source_url]
+        elif isinstance(raw_source_url, list):
+            # Already a list — ensure every entry has category_hint
+            for entry in raw_source_url:
+                if isinstance(entry, dict) and "category_hint" not in entry:
+                    entry["category_hint"] = category_hint
+            config_json["source_url"] = raw_source_url
+        else:
+            config_json["source_url"] = [{"url": site_analysis.url, "category_hint": category_hint}]
+
         config_json["spider"] = "image_promo"
         config_json["extraction_strategy"] = config_json.get("extraction_strategy") or site_analysis.extraction_strategy or "hybrid"
         
@@ -225,7 +251,7 @@ def generate_scraper_config(state: AgentState) -> AgentState:
         config_json.setdefault("min_image_height", 150)
         config_json.setdefault("min_aspect_ratio", 1.2)
         config_json.setdefault("request_delay_seconds", 4)
-        config_json.setdefault("scroll_depth", 2)
+        config_json.setdefault("scroll_depth", 3)  # A2: match manual configs (was 2)
         config_json.setdefault("enabled", True)
 
         # Create GeneratedArtifacts

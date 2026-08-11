@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# agent/test_sandbox.py
+# tests/agent/test_sandbox.py
 # ──────────────────────────────────────────────────────────────────────────────
 # Standalone test for the sandbox infrastructure.
 # Tests three deliberately misbehaving scrapers WITHOUT touching the real
 # agent pipeline.
 #
 # Usage (from repo root):
-#   ../env/bin/python agent/test_sandbox.py
+#   python -m pytest tests/agent/test_sandbox.py
 #
 # Prerequisites:
 #   1. Docker daemon running
@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 # Ensure project root is on path so `agent` package is importable
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from agent.sandbox_runner import run_scraper_in_sandbox
 
@@ -154,8 +154,8 @@ def main() -> None:
     try:
         client.images.get("promo-scraper-sandbox:latest")
         print("Sandbox image: OK (promo-scraper-sandbox:latest found)")
-    except Exception:
-        print(f"\n{FAIL}  Sandbox image not found: promo-scraper-sandbox:latest")
+    except Exception as exc:
+        print(f"\n{FAIL}  Sandbox image error: {exc}")
         print("    Build it with:")
         print("      docker build -f docker/Dockerfile.sandbox -t promo-scraper-sandbox:latest .")
         sys.exit(1)

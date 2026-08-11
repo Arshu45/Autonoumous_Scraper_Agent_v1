@@ -516,7 +516,7 @@ with tab_pending:
             samples = breakdown.get("sample_offers", [])
             with st.expander(f"🛍️ Sample Offers Extracted ({len(samples)})", expanded=True):
                 if samples:
-                    st.dataframe(pd.DataFrame(samples), width="stretch")
+                    st.json(samples)
                 else:
                     st.info("No sample offers captured.")
                     
@@ -664,37 +664,44 @@ with tab_add_new:
         elif not (new_target_url.startswith("http://") or new_target_url.startswith("https://")):
             st.error("Please provide a valid URL starting with http:// or https://")
         else:
-            from agent.orchestrator import build_agent_graph
-            from agent.models import AgentState
-            
             status_placeholder = st.empty()
-            status_placeholder.info("Initializing Agent State Graph...")
+            status_placeholder.info("Initializing Agent State Graph in isolated process...")
             
             try:
-                # Trigger the graph execution
+                from concurrent.futures import ProcessPoolExecutor
+                from agent.orchestrator import run_agent_pipeline
+
+                # Trigger the graph execution in an isolated sub-process
                 with st.spinner("Agent exploring target, building layout analysis, generating configuration, and running sandbox validations..."):
-                    state = AgentState(
-                        url=new_target_url.strip(),
-                        brand=new_brand_name.strip(),
-                        requirements=new_requirements.strip()
-                    )
-                    graph = build_agent_graph()
-                    result = graph.invoke(state)
+                    with ProcessPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(
+                            run_agent_pipeline,
+                            new_target_url.strip(),
+                            new_brand_name.strip(),
+                            new_requirements.strip()
+                        )
+                        result = future.result()
                 
                 status_placeholder.empty()
                 status_type = result.get("status")
                 report = result.get("validation_report")
                 
+                score = None
+                recommendation = None
+                if report:
+                    score = report.confidence_score if hasattr(report, "confidence_score") else report.get("confidence_score")
+                    recommendation = report.recommendation if hasattr(report, "recommendation") else report.get("recommendation")
+
                 if status_type == "registered":
                     st.success(f"🎉 **Success!** Scraper registered and auto-approved for brand '{new_brand_name}'.")
                     if report:
-                        st.write(f"- **Confidence Score:** {report.confidence_score}")
-                        st.write(f"- **Recommendation:** {report.recommendation}")
+                        st.write(f"- **Confidence Score:** {score}")
+                        st.write(f"- **Recommendation:** {recommendation}")
                 elif status_type == "validation" and report:
-                    if report.recommendation == "pending":
-                        st.warning(f"⚠️ **Pending Review:** Config generated with confidence score **{report.confidence_score}**. Review it in the **Pending Approvals Queue** tab.")
+                    if recommendation == "pending":
+                        st.warning(f"⚠️ **Pending Review:** Config generated with confidence score **{score}**. Review it in the **Pending Approvals Queue** tab.")
                     else:
-                        st.error(f"❌ **Rejected:** Config score was too low (**{report.confidence_score}**) or sandbox violations occurred. Recommendation: {report.recommendation}")
+                        st.error(f"❌ **Rejected:** Config score was too low (**{score}**) or sandbox violations occurred. Recommendation: {recommendation}")
                 elif result.get("error"):
                     st.error(f"❌ **Error occurred:** {result.get('error')}")
                 else:

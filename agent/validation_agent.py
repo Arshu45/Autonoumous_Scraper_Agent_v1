@@ -262,9 +262,9 @@ def run_validation_agent(state: AgentState) -> AgentState:
     if state.site_analysis is not None:
         anti_bot_risk = state.site_analysis.anti_bot_risk
 
-    # Read timeout from env var or default to 180s (60s was too short for multi-screenshot Vision extractions)
+    # Read timeout from env var or default to 240s (to accommodate multi-element Vision extractions inside container)
     import os
-    sandbox_timeout = int(os.getenv("SANDBOX_TIMEOUT_SECONDS", "180"))
+    sandbox_timeout = int(os.getenv("SANDBOX_TIMEOUT_SECONDS", "240"))
     try:
         sandbox_result = run_scraper_in_sandbox(
             scraper_code=scraper_code,

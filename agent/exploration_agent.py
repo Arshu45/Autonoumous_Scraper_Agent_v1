@@ -494,6 +494,7 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
         }
 
     # 5. Build and return SiteAnalysis
+    category_hint = visual_data.get("category_hint", "")
     return SiteAnalysis(
         url=url,
         brand=brand,
@@ -510,5 +511,6 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
         gemini_visual_summary=visual_data.get("summary", ""),
         notes=dom_analysis_data.get("notes", ""),
         text_selectors=dom_analysis_data.get("text_selectors", []),
-        screenshot_selectors=dom_analysis_data.get("screenshot_selectors", [])
+        screenshot_selectors=dom_analysis_data.get("screenshot_selectors", []),
+        category_hint=category_hint,
     )

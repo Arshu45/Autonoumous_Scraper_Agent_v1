@@ -154,8 +154,8 @@ def main() -> None:
     try:
         client.images.get("promo-scraper-sandbox:latest")
         print("Sandbox image: OK (promo-scraper-sandbox:latest found)")
-    except Exception:
-        print(f"\n{FAIL}  Sandbox image not found: promo-scraper-sandbox:latest")
+    except Exception as exc:
+        print(f"\n{FAIL}  Sandbox image error: {exc}")
         print("    Build it with:")
         print("      docker build -f docker/Dockerfile.sandbox -t promo-scraper-sandbox:latest .")
         sys.exit(1)

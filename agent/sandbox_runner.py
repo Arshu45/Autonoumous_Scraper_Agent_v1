@@ -19,7 +19,7 @@ _DOCKER_DESKTOP_SOCK = Path.home() / ".docker" / "desktop" / "docker.sock"
 _STANDARD_SOCK = Path("/var/run/docker.sock")
 
 
-def _get_docker_client(docker_sdk):
+def _get_docker_client(docker_sdk, timeout: int = 300):
     """
     Return a connected Docker client, auto-detecting Docker Desktop's socket.
 
@@ -29,15 +29,15 @@ def _get_docker_client(docker_sdk):
     """
     # 1. Honour explicit DOCKER_HOST if set
     if os.environ.get("DOCKER_HOST"):
-        return docker_sdk.from_env()
+        return docker_sdk.from_env(timeout=timeout)
 
     # 2. Try Docker Desktop socket (Linux Docker Desktop)
     if _DOCKER_DESKTOP_SOCK.exists():
         logger.debug("Connecting via Docker Desktop socket: %s", _DOCKER_DESKTOP_SOCK)
-        return docker_sdk.DockerClient(base_url=f"unix://{_DOCKER_DESKTOP_SOCK}")
+        return docker_sdk.DockerClient(base_url=f"unix://{_DOCKER_DESKTOP_SOCK}", timeout=timeout)
 
     # 3. Fall back to standard socket (Docker Engine via apt/snap)
-    return docker_sdk.from_env()
+    return docker_sdk.from_env(timeout=timeout)
 
 
 def detect_violations(logs: str, result: dict) -> list[str]:
@@ -109,7 +109,7 @@ def detect_violations(logs: str, result: dict) -> list[str]:
 def run_scraper_in_sandbox(
     scraper_code: Optional[str],
     config: dict,
-    timeout_seconds: int = 180,
+    timeout_seconds: int = 240,
 ) -> dict:
     """
     Run the scraper inside a locked-down, single-use Docker container.
@@ -145,7 +145,11 @@ def run_scraper_in_sandbox(
             "violations": ["timeout_or_crash"],
         }
 
-    env_vars: dict[str, str] = {"CONFIG_JSON": json.dumps(config)}
+    env_vars: dict[str, str] = {
+        "CONFIG_JSON": json.dumps(config),
+        "LITELLM_LOCAL_MODEL_COST_MAP": "True",
+        "LITELLM_TELEMETRY": "False",
+    }
     if scraper_code:
         env_vars["SCRAPER_CODE_B64"] = base64.b64encode(scraper_code.encode()).decode()
 
@@ -174,7 +178,7 @@ def run_scraper_in_sandbox(
     logger.debug("Sandbox env vars forwarded: %s", list(env_vars.keys()))
 
     try:
-        client = _get_docker_client(docker_sdk)
+        client = _get_docker_client(docker_sdk, timeout=timeout_seconds + 30)
     except Exception as exc:
         logger.error("Cannot connect to Docker daemon: %s", exc)
         return {
@@ -230,6 +234,8 @@ def run_scraper_in_sandbox(
         logger.warning("Sandbox wait/log error: %s", exc)
         try:
             partial_logs = container.logs().decode(errors="replace")
+            if partial_logs.strip():
+                logger.warning("Partial sandbox container output before error:\n%s", partial_logs.strip())
         except Exception:
             partial_logs = ""
         return {

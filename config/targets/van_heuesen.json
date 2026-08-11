@@ -1,0 +1,56 @@
+{
+  "brand": "Van Heuesen",
+  "source_url": [
+    {
+      "url": "https://www.vanheusen.com.au/?srsltid=AfmBOoolR-_tzeT6XgEBSgkrxww0qjuoPByd2v0WVnYAWreEgvkSTtIt",
+      "category_hint": "Men's formal and casual wear. All promotions \u2192 Mens."
+    }
+  ],
+  "spider": "image_promo",
+  "extraction_strategy": "hybrid",
+  "text_selectors": [
+    ".promo-header--top",
+    ".mgz-content-carouse-slide p span",
+    ".mgz-element-text p span",
+    "[class*='promo']",
+    ".mgz-element-text strong",
+    ".mgz-carousel [class*='slide']",
+    ".mgz-button a"
+  ],
+  "screenshot_selectors": [
+    ".promo-header--top",
+    ".mgz-carousel.owl-carousel",
+    ".mgz-element-row[class*='full_width']",
+    ".mgz-parallax-wrapper",
+    ".mgz-single-image-wrapper",
+    ".widget.block.block-static-block",
+    "[class*='mgz-element-row'][class*='content']"
+  ],
+  "min_image_width": 400,
+  "min_image_height": 150,
+  "min_aspect_ratio": 1.2,
+  "request_delay_seconds": 4,
+  "scroll_depth": 3,
+  "enabled": true,
+  "extraction_notes": {
+    "risks": [
+      "Carousel rotates promotional content - multiple slides may need to be captured sequentially",
+      "Magezon page builder generates unique class IDs that change on each page load - used partial class matching for resilience",
+      "Responsive design hides different sections on mobile/tablet viewports - screenshot selectors target both desktop and mobile versions",
+      "Deep nesting of promotional elements requires careful selector specificity to avoid false positives",
+      "Email signup incentive ($20 off) appears in carousel rotation and may not always be visible on initial page load"
+    ],
+    "edge_cases": [
+      "Primary shirt promotion (3 for $119, 4 for $149) appears in multiple locations - deduplication recommended",
+      "Promotional text embedded in href attributes (e.g., 'block=header_three') - text content extraction preferred over attribute parsing",
+      "Some promotional sections use background images with overlaid text - screenshot extraction essential for visual accuracy",
+      "Owl Carousel may require waiting for slide transitions to complete before capturing all promotional variants"
+    ],
+    "key_locations": [
+      "Top banner: Sitewide 15% discount",
+      "Page header carousel: Shirts bundle deal (3 for $119, 4 for $149)",
+      "Mid-page sections: Category-specific promos (Gifts For Dad, Blue is the New Neutral)",
+      "Lower sections: Email signup incentive ($20 off)"
+    ]
+  }
+}

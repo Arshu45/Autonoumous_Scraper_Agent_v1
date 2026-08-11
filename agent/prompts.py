@@ -64,6 +64,7 @@ Based on the site analysis below, produce a JSON config that HybridPromoExtracto
 Site Analysis:
 - URL: {url}
 - Brand: {brand}
+- Category Hint: {category_hint}
 - Extraction Strategy: {extraction_strategy}
 - Visual Summary: {visual_summary}
 - Identified Promo Areas: {promo_areas}
@@ -76,7 +77,12 @@ Requirements from the user: {requirements}
 The config JSON MUST have this exact shape:
 {{
     "brand": "{brand}",
-    "source_url": "{url}",
+    "source_url": [
+        {{
+            "url": "{url}",
+            "category_hint": "{category_hint}"
+        }}
+    ],
     "spider": "image_promo",
     "extraction_strategy": "{extraction_strategy}",
     "text_selectors": [...],
@@ -85,11 +91,15 @@ The config JSON MUST have this exact shape:
     "min_image_height": 150,
     "min_aspect_ratio": 1.2,
     "request_delay_seconds": 4,
-    "scroll_depth": 2,
+    "scroll_depth": 3,
     "enabled": true
 }}
 
 Rules:
+- source_url MUST be an array of objects, each with "url" and "category_hint" keys. Never a plain string.
+- category_hint: one short sentence describing the site's product category and how to classify promotions.
+  Examples: "Women's fashion and accessories. All promotions → Womens."
+            "Men's and women's leather footwear. Always Footwear."
 - extraction_strategy must be one of: "text", "screenshot", "image", "hybrid"
 - text_selectors: CSS selectors whose textContent contains promo text
 - screenshot_selectors: CSS selectors for elements to capture as screenshots for Vision API
@@ -97,7 +107,7 @@ Rules:
 - Provide at least 3 text_selectors and 3 screenshot_selectors
 - Do NOT use jQuery-style or non-standard selectors (e.g. :contains(), :has(), :first, :last). Use only valid native CSS selectors.
 - Set request_delay_seconds to 4 (default) unless the site is known to rate-limit aggressively
-- Set scroll_depth based on whether lazy-loaded content was detected
+- Set scroll_depth to 3 by default; reduce to 2 only if the site has no lazy-loaded content
 
 Also provide:
 1. An estimated offer count (how many offers you expect the scraper to find)

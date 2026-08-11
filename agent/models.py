@@ -20,6 +20,7 @@ class SiteAnalysis(BaseModel):
     notes: str = ""
     text_selectors: List[str] = Field(default_factory=list)
     screenshot_selectors: List[str] = Field(default_factory=list)
+    category_hint: str = ""  # A1: e.g. "Women's fashion → Womens. Always Womens."
 
 class GeneratedArtifacts(BaseModel):
     brand: str

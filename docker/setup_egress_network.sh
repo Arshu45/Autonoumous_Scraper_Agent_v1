@@ -143,9 +143,10 @@ do_create() {
     iptables -A "$CHAIN" -p udp --dport 53 -j ACCEPT
     iptables -A "$CHAIN" -p tcp --dport 53 -j ACCEPT
 
-    # Allow HTTPS (port 443) to each resolved IP of the target domain
+    # Allow HTTP (port 80) and HTTPS (port 443) to each resolved IP of the target domain
     for ip in "${ALLOWED_IPS[@]}"; do
-        echo "[setup_egress_network]   Allowing HTTPS → $ip (from $target_domain)"
+        echo "[setup_egress_network]   Allowing HTTP/HTTPS → $ip (from $target_domain)"
+        iptables -A "$CHAIN" -o "$BRIDGE_IFACE" -d "$ip" -p tcp --dport 80 -j ACCEPT
         iptables -A "$CHAIN" -o "$BRIDGE_IFACE" -d "$ip" -p tcp --dport 443 -j ACCEPT
     done
 

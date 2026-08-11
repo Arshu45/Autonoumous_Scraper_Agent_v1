@@ -335,10 +335,13 @@ def run_validation_agent(state: AgentState) -> AgentState:
 
     if parsed_json is not None:
         offer_items = parsed_json.get("offers", [])
-        logger.info("Parsed %d offers from sandbox logs for brand=%s", len(offer_items), brand)
+        logger.info("[VALIDATION AGENT] Parsed %d offers from sandbox execution logs for brand='%s'", len(offer_items), brand)
+        for idx, item in enumerate(offer_items[:5], 1):
+            logger.info("   -> [Offer #%d]: '%s' | Category: %s | Confidence: %s",
+                        idx, item.get("title"), item.get("category"), item.get("confidence"))
     else:
         logger.warning(
-            "Could not find JSON result line in sandbox logs for brand=%s. "
+            "[VALIDATION AGENT] Could not find JSON result line in sandbox logs for brand=%s. "
             "Log snippet (last 500 chars): %s",
             brand, logs[-500:] if logs else "(empty)",
         )
@@ -351,8 +354,8 @@ def run_validation_agent(state: AgentState) -> AgentState:
         if not _validate_offer(o, i)
     )
     logger.info(
-        "Schema validation for brand=%s: valid=%s errors=%d",
-        brand, schema_valid, len(schema_errors),
+        "[VALIDATION AGENT] Schema validation for brand=%s: valid=%s (%d/%d passed schema)",
+        brand, schema_valid, valid_offer_count, len(offer_items),
     )
 
     # ---- 5. Confidence score -------------------------------------------------
@@ -366,6 +369,11 @@ def run_validation_agent(state: AgentState) -> AgentState:
 
     # ---- 6. Recommendation ---------------------------------------------------
     recommendation = _determine_recommendation(confidence_score, violations)
+
+    logger.info(
+        "[VALIDATION AGENT] Final Confidence Score: %d/100 | Recommendation: '%s' | Score Breakdown: %s",
+        confidence_score, recommendation, json.dumps(score_breakdown),
+    )
 
     # ---- 7. Sample offers (up to 3) ------------------------------------------
     sample_offers = offer_items[:3]

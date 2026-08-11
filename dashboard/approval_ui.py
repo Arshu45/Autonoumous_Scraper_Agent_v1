@@ -135,9 +135,17 @@ def approve_pending_target(brand, config_json, confidence_score, score_breakdown
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config_json, f, indent=2)
 
-    source_url = config_json.get("source_url", "")
-    if not isinstance(source_url, str):
-        source_url = (source_url or [""])[0]
+    source_url_raw = config_json.get("source_url", "")
+    if isinstance(source_url_raw, list) and len(source_url_raw) > 0:
+        first = source_url_raw[0]
+        if isinstance(first, dict):
+            source_url = first.get("url", "")
+        else:
+            source_url = str(first)
+    elif isinstance(source_url_raw, dict):
+        source_url = source_url_raw.get("url", "")
+    else:
+        source_url = str(source_url_raw or "")
 
     state = AgentState(url=source_url, brand=brand, requirements="")
     state.generated_artifacts = GeneratedArtifacts(
@@ -166,13 +174,13 @@ def approve_pending_target(brand, config_json, confidence_score, score_breakdown
             # no longer appears in the pending queue.
             resolve_session = get_session()
             try:
-                with resolve_session.begin():
-                    _mark_outcome_resolved(
-                        resolve_session, brand,
-                        outcome_id or -1, "approved"
-                    )
+                _mark_outcome_resolved(
+                    resolve_session, brand,
+                    outcome_id or -1, "approved"
+                )
+                resolve_session.commit()
             except Exception:
-                pass   # non-critical — queue exclusion already handled by CTE
+                resolve_session.rollback()
             finally:
                 resolve_session.close()
             return True, "Target registered successfully."
@@ -205,17 +213,17 @@ def _mark_outcome_resolved(session, brand: str, outcome_id: int, new_recommendat
 def reject_pending_target(brand, comment, confidence_score, user_id, outcome_id):
     session = get_session()
     try:
-        with session.begin():
-            session.add(AgentAuditLog(
-                brand=brand,
-                user_id=user_id,
-                action="reject",
-                details={
-                    "comment": comment,
-                    "confidence_score": confidence_score
-                }
-            ))
-            _mark_outcome_resolved(session, brand, outcome_id, "reject")
+        session.add(AgentAuditLog(
+            brand=brand,
+            user_id=user_id,
+            action="reject",
+            details={
+                "comment": comment,
+                "confidence_score": confidence_score
+            }
+        ))
+        _mark_outcome_resolved(session, brand, outcome_id, "reject")
+        session.commit()
 
         return True, "Target rejected successfully."
     except Exception as e:
@@ -227,23 +235,23 @@ def reject_pending_target(brand, comment, confidence_score, user_id, outcome_id)
 def toggle_target_status(brand, enabled, user_id):
     session = get_session()
     try:
-        with session.begin():
-            target = session.query(PrefectTargetRegistry).filter_by(brand=brand).first()
-            if target:
-                target.enabled = enabled
-                
-            competitor = session.query(Competitor).filter_by(name=brand).first()
-            if competitor:
-                competitor.enabled = enabled
-                
-            action = "enable_target" if enabled else "disable_target"
-            audit = AgentAuditLog(
-                brand=brand,
-                user_id=user_id,
-                action=action,
-                details={"enabled": enabled}
-            )
-            session.add(audit)
+        target = session.query(PrefectTargetRegistry).filter_by(brand=brand).first()
+        if target:
+            target.enabled = enabled
+            
+        competitor = session.query(Competitor).filter_by(name=brand).first()
+        if competitor:
+            competitor.enabled = enabled
+            
+        action = "enable_target" if enabled else "disable_target"
+        audit = AgentAuditLog(
+            brand=brand,
+            user_id=user_id,
+            action=action,
+            details={"enabled": enabled}
+        )
+        session.add(audit)
+        session.commit()
             
         return True, f"Target status updated to {'enabled' if enabled else 'disabled'}."
     except Exception as e:
@@ -524,7 +532,7 @@ with tab_pending:
         act_col1, act_col2 = st.columns(2)
         
         with act_col1:
-            approve_clicked = st.button("✅ Approve & Register", disabled=not is_valid_json, width="stretch")
+            approve_clicked = st.button("✅ Approve & Register", disabled=not is_valid_json, use_container_width=True)
             if approve_clicked:
                 success, msg = approve_pending_target(
                     brand=brand,
@@ -542,7 +550,7 @@ with tab_pending:
                     st.error(msg)
 
         with act_col2:
-            reject_clicked = st.button("❌ Reject Target", width="stretch")
+            reject_clicked = st.button("❌ Reject Target", use_container_width=True)
             if reject_clicked or st.session_state.get(f"show_reject_{brand}", False):
                 st.session_state[f"show_reject_{brand}"] = True
                 reject_comment = st.text_area("Rejection Reason", placeholder="Explain why this configuration was rejected...", key=f"cmt_{brand}")
@@ -656,7 +664,7 @@ with tab_add_new:
         new_target_url = st.text_input("Target URL *", placeholder="e.g., https://www.zara.com/au/en/sale-lp.html")
         new_requirements = st.text_area("Extraction Requirements / Notes (Optional)", placeholder="e.g., Focus on shoes and jackets promotions, ignore sitewide banners.")
         
-        submit_btn = st.form_submit_button("🚀 Run Scraper Agent", width="stretch")
+        submit_btn = st.form_submit_button("🚀 Run Scraper Agent", use_container_width=True)
 
     if submit_btn:
         if not new_brand_name.strip() or not new_target_url.strip():

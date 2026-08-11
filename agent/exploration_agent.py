@@ -450,6 +450,73 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
         with open(post_scroll_ss_path, "wb") as f:
             f.write(post_scroll_ss_bytes)
 
+        # ── Extract Candidate Promotional & Image Banner DOM Elements ─────────
+        logger.info("Extracting candidate promotional & image banner DOM elements for %s", brand)
+        promo_candidates = []
+        try:
+            promo_candidates = page.evaluate("""
+            () => {
+                // Generic structural & numeric deal signals (ZERO hardcoded product or brand words)
+                const numeric_deal_regex = /[\\$\\£\\€\\¥]|\\b\\d+[\\s-]*%|\\b(buy|save|get|off|from|with)\\s*(\\d+|\\$\\d+|au\\$\\d+)?\\b/i;
+                const ui_structure_regex = /\\b(hero|banner|slide|slider|carousel|card|tile|promo|offer|deal|campaign|announcement|header-bar)\\b/i;
+                
+                const skip_tags = new Set(['html', 'body', 'main', 'header', 'footer', 'nav', 'script', 'style', 'svg', 'path']);
+                
+                const allElements = Array.from(document.querySelectorAll('*'));
+                const matches = [];
+
+                for (const el of allElements) {
+                    const tagName = el.tagName.toLowerCase();
+                    if (skip_tags.has(tagName)) continue;
+
+                    // Target leaf/component nodes (ignore large structural wrappers with many children)
+                    if (el.children.length > 8) continue;
+
+                    const classStr = typeof el.className === 'string' ? el.className : (el.getAttribute('class') || '');
+                    const idStr = el.id || '';
+                    const altText = el.getAttribute('alt') || '';
+                    const ariaLabel = el.getAttribute('aria-label') || '';
+                    const srcStr = el.getAttribute('src') || el.getAttribute('data-src') || '';
+                    const innerText = el.innerText?.trim() || '';
+
+                    // Ignore large boilerplate text containers (> 300 chars)
+                    if (innerText.length > 300) continue;
+
+                    const combinedSignal = `${innerText} ${altText} ${ariaLabel} ${classStr} ${idStr} ${srcStr}`;
+
+                    const hasDealSignal = numeric_deal_regex.test(combinedSignal);
+                    const hasUiStructure = ui_structure_regex.test(classStr + ' ' + idStr);
+
+                    if (!hasDealSignal && !hasUiStructure) continue;
+
+                    const isImageBanner = (tagName === 'img' || tagName === 'picture' || !!altText || !!srcStr || ui_structure_regex.test(classStr + idStr));
+                    
+                    // Priority scoring based purely on UI/content characteristics (no hardcoded category words)
+                    let priorityScore = (innerText.length >= 5 && innerText.length <= 150) ? 10 : 2;
+                    if (hasDealSignal) priorityScore += 15;
+                    if (isImageBanner) priorityScore += 8;
+
+                    matches.push({
+                        tag: tagName,
+                        id: idStr,
+                        classes: classStr.trim(),
+                        type: isImageBanner ? "image_banner" : "text_element",
+                        alt_or_aria: (altText || ariaLabel).slice(0, 100),
+                        src_snippet: srcStr ? srcStr.split('/').pop().slice(0, 50) : '',
+                        text_snippet: innerText.slice(0, 120),
+                        score: priorityScore
+                    });
+                }
+
+                // Sort candidates so the most distinct component elements and banners rank first
+                matches.sort((a, b) => b.score - a.score);
+
+                return matches.slice(0, 60);
+            }
+            """)
+        except Exception as cand_err:
+            logger.warning("Failed to extract candidate promo elements: %s", cand_err)
+
         browser.close()
 
     # 2. Score anti-bot risk
@@ -476,9 +543,11 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
 
     # 4. LLM DOM Analysis
     cleaned_dom = clean_dom_regex(dom_html)
+    candidate_str = json.dumps(promo_candidates, indent=2) if promo_candidates else "None identified"
     
     dom_analysis_prompt_text = DOM_ANALYSIS_PROMPT.format(
         visual_summary=visual_data.get("summary", ""),
+        candidate_elements=candidate_str,
         dom_html=cleaned_dom
     )
     

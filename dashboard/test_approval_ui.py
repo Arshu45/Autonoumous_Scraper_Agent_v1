@@ -78,7 +78,7 @@ def test_approve_callback():
 
     config_json = {
         "brand": brand,
-        "source_url": "https://example.com/ui-test",
+        "source_url": [{"url": "https://example.com/ui-test", "category_hint": "Fashion"}],
         "spider": "image_promo",
         "extraction_strategy": "hybrid",
         "text_selectors": [".ui-test-text"],

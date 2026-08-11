@@ -109,6 +109,10 @@ class TestTeamPolicyEngine(unittest.TestCase):
         # 2. Create test promotion
         import uuid
         test_hash = f"test_hash_{uuid.uuid4().hex[:12]}"
+        
+        from datetime import datetime, timezone
+        scraped_at = datetime.now(timezone.utc)
+
         promo = Promotion(
             competitor_id=competitor.id,
             brand="BIG W",
@@ -116,7 +120,7 @@ class TestTeamPolicyEngine(unittest.TestCase):
             category="Beauty",
             source_name="hybrid",
             offer_hash=test_hash,
-            scraped_at=os.sys.modules['datetime'].datetime.utcnow()
+            scraped_at=scraped_at
         )
         self.session.add(promo)
         self.session.flush()

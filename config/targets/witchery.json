@@ -3,47 +3,40 @@
   "source_url": [
     {
       "url": "https://www.witchery.com.au/",
-      "category_hint": "Women's fashion, shoes, and accessories -> Womens. Always Womens."
+      "category_hint": "Women's fashion and accessories. All promotions \u2192 Womens."
     }
   ],
   "spider": "image_promo",
   "extraction_strategy": "hybrid",
-  "text_selectors": [
-    "div[class*='tw-max-w-[1440px]']",
-    "div[class*='SignupFooter']",
-    "a[href='/sale/']",
-    "header",
-    "[data-type='RichText'] p"
-  ],
-  "screenshot_selectors": [
-    "div[class*='tw-max-w-[1440px]']",
-    "[data-type='SignupFooter']"
-  ],
-  "cta_selectors": [
-    "a[href='/sale/']",
-    "a[href*='subscriber']"
-  ],
+  "text_selectors": [],
+  "screenshot_selectors": [],
   "exclude_selectors": [
     "nav",
     "footer",
+    ".cookie-banner",
     ".breadcrumb",
-    ".cookie",
-    ".newsletter input",
     ".search",
-    ".logo"
+    ".logo",
+    ".header-nav",
+    ".mobile-menu",
+    ".account-menu",
+    ".cart-icon"
   ],
   "exclude_url_patterns": [
     "/logo",
     "/icon",
-    "/favicon",
+    "/avatar",
     "social",
     "payment",
-    "brand-logo"
+    "brand-logo",
+    ".svg",
+    ".png"
   ],
   "min_image_width": 400,
   "min_image_height": 150,
   "min_aspect_ratio": 1.2,
   "request_delay_seconds": 4,
   "scroll_depth": 3,
-  "enabled": true
+  "enabled": true,
+  "extraction_notes": "Three distinct promotional offers identified: (1) Hero banner with 25% OFF text overlay targeting Women's Fashion, (2) Mid-page red banner strip with SALE UP TO 70% OFF text, (3) Footer newsletter signup with 15% off + free shipping offer. All promotions are text-based HTML elements rather than image assets. Low anti-bot risk. Hybrid extraction recommended to capture both text content and visual banner context. Newsletter signup promo may require form interaction detection."
 }

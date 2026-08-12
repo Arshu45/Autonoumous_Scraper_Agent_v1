@@ -210,7 +210,7 @@ if not filtered_df.empty:
             xaxis=dict(showgrid=True, gridcolor="#EBEBF2"),
             yaxis=dict(showgrid=False)
         )
-        st.plotly_chart(fig_brand, width="stretch")
+        st.plotly_chart(fig_brand, use_container_width=True)
         
     with viz_col2:
         st.markdown('<div class="section-label">Extraction Timeline</div>', unsafe_allow_html=True)
@@ -232,7 +232,7 @@ if not filtered_df.empty:
             xaxis=dict(showgrid=True, gridcolor="#EBEBF2"),
             yaxis=dict(showgrid=True, gridcolor="#EBEBF2")
         )
-        st.plotly_chart(fig_time, width="stretch")
+        st.plotly_chart(fig_time, use_container_width=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -251,7 +251,7 @@ else:
             data=excel_data,
             file_name=f"weekly_team_matrix_{datetime.date.today()}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            width="stretch"
+            use_container_width=True
         )
     st.markdown('<div style="margin-top: 0.5rem;"></div>', unsafe_allow_html=True)
 
@@ -349,6 +349,6 @@ else:
             "Source URL": st.column_config.LinkColumn("Source URL"),
             "Scraped Timestamp": st.column_config.DatetimeColumn("Scraped Timestamp", format="YYYY-MM-DD HH:mm:ss"),
         },
-        width="stretch",
+        use_container_width=True,
         hide_index=True
     )

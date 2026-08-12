@@ -139,6 +139,96 @@ def clean_selectors(selectors) -> list[str]:
                 cleaned.append(sel_strip)
     return cleaned
 
+def validate_selectors_live(url: str, config: dict) -> dict:
+    """
+    Dedicated selector-validation pass against live page using Playwright.
+    Discards any selectors that return 0 elements (non-existent/hallucinated)
+    or exceed hit count thresholds (50 for text_selectors, 20 for screenshot_selectors).
+    """
+    if os.getenv("SKIP_LIVE_SELECTOR_VALIDATION", "").lower() in ("true", "1", "yes"):
+        logger.info("Skipping live selector validation (SKIP_LIVE_SELECTOR_VALIDATION is set).")
+        return config
+
+    text_selectors = config.get("text_selectors", [])
+    screenshot_selectors = config.get("screenshot_selectors", [])
+
+    if not text_selectors and not screenshot_selectors:
+        return config
+
+    # Avoid attempting live network calls for mock/test domains
+    if "example.com" in url or "test.com" in url:
+        logger.info("Skipping live selector validation for test domain url=%s", url)
+        return config
+
+    logger.info("Starting live selector validation for url=%s", url)
+
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--window-size=1440,900",
+                ]
+            )
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={"width": 1440, "height": 900},
+            )
+            page = context.new_page()
+            try:
+                page.goto(url, timeout=30_000, wait_until="domcontentloaded")
+                # Scroll halfway and back to hydrate dynamic/lazy elements
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
+                page.wait_for_timeout(1500)
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(1000)
+            except Exception as nav_err:
+                logger.warning("Live selector validation navigation warning for %s: %s", url, nav_err)
+
+            # Validate text selectors (allowed hit count: 1..50)
+            valid_text = []
+            for sel in text_selectors:
+                try:
+                    count = page.locator(sel).count()
+                    if 0 < count <= 50:
+                        valid_text.append(sel)
+                    else:
+                        logger.info("Pruned text selector '%s': count=%d (allowed 1..50)", sel, count)
+                except Exception as sel_err:
+                    logger.warning("Error testing text selector '%s': %s", sel, sel_err)
+
+            # Validate screenshot selectors (allowed hit count: 1..20)
+            valid_ss = []
+            for sel in screenshot_selectors:
+                try:
+                    count = page.locator(sel).count()
+                    if 0 < count <= 20:
+                        valid_ss.append(sel)
+                    else:
+                        logger.info("Pruned screenshot selector '%s': count=%d (allowed 1..20)", sel, count)
+                except Exception as sel_err:
+                    logger.warning("Error testing screenshot selector '%s': %s", sel, sel_err)
+
+            browser.close()
+
+            if not valid_text and text_selectors:
+                logger.warning("All text selectors were pruned during live validation for %s", url)
+            if not valid_ss and screenshot_selectors:
+                logger.warning("All screenshot selectors were pruned during live validation for %s", url)
+
+            config["text_selectors"] = valid_text
+            config["screenshot_selectors"] = valid_ss
+
+    except Exception as exc:
+        logger.warning("Live selector validation encountered an error; using clean selectors: %s", exc)
+
+    return config
+
 def generate_scraper_config(state: AgentState) -> AgentState:
     """
     Generation Agent node: Takes exploration results and generates a scraper
@@ -247,6 +337,11 @@ def generate_scraper_config(state: AgentState) -> AgentState:
         ss_sels = config_json.get("screenshot_selectors") or selectors_info["screenshot_selectors"]
         config_json["screenshot_selectors"] = clean_selectors(ss_sels)
 
+        # Live selector validation pass
+        config_json = validate_selectors_live(site_analysis.url, config_json)
+
+        config_json.setdefault("exclude_selectors", ["nav", "footer", ".cookie-banner", ".breadcrumb", ".search", ".logo"])
+        config_json.setdefault("exclude_url_patterns", ["/logo", "/icon", "/avatar", "social", "payment", "brand-logo"])
         config_json.setdefault("min_image_width", 400)
         config_json.setdefault("min_image_height", 150)
         config_json.setdefault("min_aspect_ratio", 1.2)

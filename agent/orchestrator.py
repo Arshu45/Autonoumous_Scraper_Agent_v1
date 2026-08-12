@@ -7,7 +7,9 @@ from agent.models import AgentState
 logger = logging.getLogger(__name__)
 
 def run_exploration_agent(state: AgentState) -> AgentState:
-    logger.info("Running exploration agent on url=%s", state.url)
+    logger.info("==========================================================================")
+    logger.info(">>> [AGENT PIPELINE] STEP 1: EXPLORATION AGENT | Brand: '%s' | URL: '%s'", state.brand, state.url)
+    logger.info("==========================================================================")
     state.status = "exploration"
     try:
         from agent.exploration_agent import explore_site
@@ -20,7 +22,9 @@ def run_exploration_agent(state: AgentState) -> AgentState:
     return state
 
 def run_generation_agent(state: AgentState) -> AgentState:
-    logger.info("Running generation agent on brand=%s", state.brand)
+    logger.info("==========================================================================")
+    logger.info(">>> [AGENT PIPELINE] STEP 2: CONFIG GENERATION AGENT | Brand: '%s'", state.brand)
+    logger.info("==========================================================================")
     try:
         from agent.generation_agent import generate_scraper_config
         state = generate_scraper_config(state)
@@ -31,7 +35,9 @@ def run_generation_agent(state: AgentState) -> AgentState:
     return state
 
 def run_validation_agent(state: AgentState) -> AgentState:
-    logger.info("Running validation agent on brand=%s", state.brand)
+    logger.info("==========================================================================")
+    logger.info(">>> [AGENT PIPELINE] STEP 3: SANDBOX VALIDATION AGENT | Brand: '%s'", state.brand)
+    logger.info("==========================================================================")
     try:
         from agent.validation_agent import run_validation_agent as _run
         return _run(state)
@@ -42,7 +48,9 @@ def run_validation_agent(state: AgentState) -> AgentState:
         return state
 
 def run_registration(state: AgentState) -> AgentState:
-    logger.info("Running registration agent on brand=%s", state.brand)
+    logger.info("==========================================================================")
+    logger.info(">>> [AGENT PIPELINE] STEP 4: AUTO REGISTRATION AGENT | Brand: '%s'", state.brand)
+    logger.info("==========================================================================")
     try:
         from agent.registration_agent import run_registration as _run
         return _run(state)
@@ -56,10 +64,11 @@ def route_after_exploration(state: AgentState) -> str:
     """Short-circuit to END if exploration failed — avoids wasting a Docker sandbox run."""
     if state.status == "failed":
         logger.warning(
-            "Exploration failed for brand=%s (error: %s). Short-circuiting pipeline.",
+            "[ROUTER] Exploration failed for brand=%s (error: %s). Short-circuiting pipeline.",
             state.brand, state.error,
         )
         return "failed"
+    logger.info("[ROUTER] Exploration successful for brand=%s. Proceeding to Generation Agent.", state.brand)
     return "ok"
 
 
@@ -67,32 +76,33 @@ def route_after_generation(state: AgentState) -> str:
     """Short-circuit to END if generation failed — avoids launching the sandbox with an empty config."""
     if state.status == "failed":
         logger.warning(
-            "Generation failed for brand=%s (error: %s). Short-circuiting pipeline.",
+            "[ROUTER] Generation failed for brand=%s (error: %s). Short-circuiting pipeline.",
             state.brand, state.error,
         )
         return "failed"
+    logger.info("[ROUTER] Config Generation successful for brand=%s. Proceeding to Sandbox Validation Agent.", state.brand)
     return "ok"
 
 
 def route_after_validation(state: AgentState) -> str:
     # If validation_report is None or doesn't exist, default to reject
     if not state.validation_report:
-        logger.warning("No validation report found. Routing to reject.")
+        logger.warning("[ROUTER] No validation report found. Routing to REJECT.")
         return "reject"
 
     if state.validation_report.sandbox_violations:
-        logger.warning("Sandbox violations detected. Routing to reject.")
+        logger.warning("[ROUTER] Sandbox violations detected (%s). Routing to REJECT.", state.validation_report.sandbox_violations)
         return "reject"
 
     score = state.validation_report.confidence_score
     if score >= 90:
-        logger.info("Validation score >= 90 (%d). Routing to auto_approve.", score)
+        logger.info("[ROUTER] Validation score >= 90 (%d). Routing to AUTO_APPROVE & Registration Agent.", score)
         return "auto_approve"
     elif score >= 70:
-        logger.info("Validation score 70-89 (%d). Routing to pending.", score)
+        logger.info("[ROUTER] Validation score 70-89 (%d). Routing to PENDING human review.", score)
         return "pending"
     else:
-        logger.info("Validation score < 70 (%d). Routing to reject.", score)
+        logger.info("[ROUTER] Validation score < 70 (%d). Routing to REJECT.", score)
         return "reject"
 
 def build_agent_graph() -> StateGraph:

@@ -32,9 +32,12 @@ Respond in JSON format:
 
 DOM_ANALYSIS_PROMPT = """You are analyzing the DOM HTML of a retail website to identify CSS selectors for promotional content.
 
-Given the following DOM HTML and a visual analysis summary, identify the most reliable CSS selectors that target promotional banners, sale announcements, and discount text.
+Given the visual analysis summary, candidate promotional DOM elements, and DOM HTML, identify the most reliable CSS selectors that target promotional banners, sale announcements, and discount text.
 
 Visual analysis summary: {visual_summary}
+
+Candidate Promotional Elements (Extracted directly from DOM):
+{candidate_elements}
 
 DOM HTML (truncated to relevant sections):
 {dom_html}
@@ -87,6 +90,8 @@ The config JSON MUST have this exact shape:
     "extraction_strategy": "{extraction_strategy}",
     "text_selectors": [...],
     "screenshot_selectors": [...],
+    "exclude_selectors": ["nav", "footer", ".cookie-banner", ".breadcrumb", ".search", ".logo"],
+    "exclude_url_patterns": ["/logo", "/icon", "/avatar", "social", "payment", "brand-logo"],
     "min_image_width": 400,
     "min_image_height": 150,
     "min_aspect_ratio": 1.2,

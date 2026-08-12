@@ -178,7 +178,7 @@ def run_scraper_in_sandbox(
     logger.debug("Sandbox env vars forwarded: %s", list(env_vars.keys()))
 
     try:
-        client = _get_docker_client(docker_sdk, timeout=timeout_seconds + 30)
+        client = _get_docker_client(docker_sdk, timeout=timeout_seconds + 60)
     except Exception as exc:
         logger.error("Cannot connect to Docker daemon: %s", exc)
         return {

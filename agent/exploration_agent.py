@@ -450,6 +450,73 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
         with open(post_scroll_ss_path, "wb") as f:
             f.write(post_scroll_ss_bytes)
 
+        # ── Extract Candidate Promotional & Image Banner DOM Elements ─────────
+        logger.info("Extracting candidate promotional & image banner DOM elements for %s", brand)
+        promo_candidates = []
+        try:
+            promo_candidates = page.evaluate("""
+            () => {
+                // Generic structural & numeric deal signals (ZERO hardcoded product or brand words)
+                const numeric_deal_regex = /[\\$\\£\\€\\¥]|\\b\\d+[\\s-]*%|\\b(buy|save|get|off|from|with)\\s*(\\d+|\\$\\d+|au\\$\\d+)?\\b/i;
+                const ui_structure_regex = /\\b(hero|banner|slide|slider|carousel|card|tile|promo|offer|deal|campaign|announcement|header-bar)\\b/i;
+                
+                const skip_tags = new Set(['html', 'body', 'main', 'header', 'footer', 'nav', 'script', 'style', 'svg', 'path']);
+                
+                const allElements = Array.from(document.querySelectorAll('*'));
+                const matches = [];
+
+                for (const el of allElements) {
+                    const tagName = el.tagName.toLowerCase();
+                    if (skip_tags.has(tagName)) continue;
+
+                    // Target leaf/component nodes (ignore large structural wrappers with many children)
+                    if (el.children.length > 8) continue;
+
+                    const classStr = typeof el.className === 'string' ? el.className : (el.getAttribute('class') || '');
+                    const idStr = el.id || '';
+                    const altText = el.getAttribute('alt') || '';
+                    const ariaLabel = el.getAttribute('aria-label') || '';
+                    const srcStr = el.getAttribute('src') || el.getAttribute('data-src') || '';
+                    const innerText = el.innerText?.trim() || '';
+
+                    // Ignore large boilerplate text containers (> 300 chars)
+                    if (innerText.length > 300) continue;
+
+                    const combinedSignal = `${innerText} ${altText} ${ariaLabel} ${classStr} ${idStr} ${srcStr}`;
+
+                    const hasDealSignal = numeric_deal_regex.test(combinedSignal);
+                    const hasUiStructure = ui_structure_regex.test(classStr + ' ' + idStr);
+
+                    if (!hasDealSignal && !hasUiStructure) continue;
+
+                    const isImageBanner = (tagName === 'img' || tagName === 'picture' || !!altText || !!srcStr || ui_structure_regex.test(classStr + idStr));
+                    
+                    // Priority scoring based purely on UI/content characteristics (no hardcoded category words)
+                    let priorityScore = (innerText.length >= 5 && innerText.length <= 150) ? 10 : 2;
+                    if (hasDealSignal) priorityScore += 15;
+                    if (isImageBanner) priorityScore += 8;
+
+                    matches.push({
+                        tag: tagName,
+                        id: idStr,
+                        classes: classStr.trim(),
+                        type: isImageBanner ? "image_banner" : "text_element",
+                        alt_or_aria: (altText || ariaLabel).slice(0, 100),
+                        src_snippet: srcStr ? srcStr.split('/').pop().slice(0, 50) : '',
+                        text_snippet: innerText.slice(0, 120),
+                        score: priorityScore
+                    });
+                }
+
+                // Sort candidates so the most distinct component elements and banners rank first
+                matches.sort((a, b) => b.score - a.score);
+
+                return matches.slice(0, 60);
+            }
+            """)
+        except Exception as cand_err:
+            logger.warning("Failed to extract candidate promo elements: %s", cand_err)
+
         browser.close()
 
     # 2. Score anti-bot risk
@@ -460,38 +527,54 @@ def explore_site(url: str, brand: str) -> SiteAnalysis:
     
     mock_resp = MockResponse(resp_status, resp_headers)
     anti_bot_risk, anti_bot_signals = score_anti_bot_risk(mock_resp, dom_html)
-    logger.info("Anti-bot risk: %s (signals: %s)", anti_bot_risk, anti_bot_signals)
+    logger.info("[EXPLORATION AGENT] Anti-bot risk assessment: %s (signals: %s)", anti_bot_risk, anti_bot_signals)
 
     # 3. Vision Call
+    logger.info("[EXPLORATION AGENT] Sending page screenshots to Vision LLM...")
     visual_raw = call_exploration_vision(initial_ss_bytes, post_scroll_ss_bytes)
     visual_data = parse_json_object(visual_raw)
     if visual_data is None:
-        logger.warning("Failed to parse Vision JSON. Response was: %s", visual_raw)
+        logger.warning("[EXPLORATION AGENT] Failed to parse Vision JSON. Response was: %s", visual_raw)
         visual_data = {
             "promotional_areas": [],
             "total_promo_areas_found": 0,
             "dominant_promo_type": "mixed",
             "summary": "Failed to parse visual summary from Vision model"
         }
+    else:
+        logger.info("[EXPLORATION AGENT] Vision LLM Summary: '%s' | Promo Areas Found: %d",
+                    visual_data.get("summary", ""), visual_data.get("total_promo_areas_found", 0))
 
     # 4. LLM DOM Analysis
     cleaned_dom = clean_dom_regex(dom_html)
-    
+    candidate_str = json.dumps(promo_candidates, indent=2) if promo_candidates else "None identified"
+    logger.info("[EXPLORATION AGENT] Candidate promo DOM elements extracted: %d items", len(promo_candidates))
+    logger.debug("[EXPLORATION AGENT] Candidate Elements JSON:\n%s", candidate_str)
+
     dom_analysis_prompt_text = DOM_ANALYSIS_PROMPT.format(
         visual_summary=visual_data.get("summary", ""),
+        candidate_elements=candidate_str,
         dom_html=cleaned_dom
     )
     
+    logger.info("[EXPLORATION AGENT] Sending candidate DOM elements & visual summary to Reasoning LLM...")
     dom_analysis_raw = call_exploration_reasoning(dom_analysis_prompt_text)
     dom_analysis_data = parse_json_object(dom_analysis_raw)
     if dom_analysis_data is None:
-        logger.warning("Failed to parse DOM analysis JSON. Response was: %s", dom_analysis_raw)
+        logger.warning("[EXPLORATION AGENT] Failed to parse DOM analysis JSON. Response was: %s", dom_analysis_raw)
         dom_analysis_data = {
             "extraction_strategy": "hybrid",
             "text_selectors": [],
             "screenshot_selectors": [],
             "notes": "Failed to parse DOM selectors from LLM"
         }
+    else:
+        logger.info("[EXPLORATION AGENT] Proposed Strategy: %s | Text Selectors: %s | Screenshot Selectors: %s",
+                    dom_analysis_data.get("extraction_strategy"),
+                    dom_analysis_data.get("text_selectors"),
+                    dom_analysis_data.get("screenshot_selectors"))
+        if dom_analysis_data.get("notes"):
+            logger.info("[EXPLORATION AGENT] LLM DOM Notes: %s", dom_analysis_data.get("notes"))
 
     # 5. Build and return SiteAnalysis
     category_hint = visual_data.get("category_hint", "")

@@ -18,6 +18,7 @@ from agent.prompts import CONFIG_GENERATION_PROMPT
 from agent.exploration_agent import parse_json_object
 
 logger = logging.getLogger(__name__)
+litellm.suppress_debug_info = True
 
 def call_generation_llm(prompt_text: str) -> str:
     """
@@ -29,7 +30,7 @@ def call_generation_llm(prompt_text: str) -> str:
     model_name = os.getenv("LLM_MODEL") or "openai/claude-haiku-4.5"
     
     messages = [{"role": "user", "content": prompt_text}]
-    litellm.suppress_debug_info = True
+
 
     # 1. Try primary LiteLLM model
     try:
@@ -55,14 +56,16 @@ def call_generation_llm(prompt_text: str) -> str:
             
         reply = response.choices[0].message.content
         
-        # Extract token usage and log cost
+        # Extract token usage and cost from LiteLLM response
         usage = response.usage
         prompt_tokens = getattr(usage, "prompt_tokens", 0)
         completion_tokens = getattr(usage, "completion_tokens", 0)
         total_tokens = getattr(usage, "total_tokens", 0)
         
-        # Estimate cost ($1.00 / 1M input, $5.00 / 1M output)
-        cost = (prompt_tokens * 1.00 / 1e6) + (completion_tokens * 5.00 / 1e6)
+        try:
+            cost = litellm.completion_cost(completion_response=response)
+        except Exception:
+            cost = 0.0
         
         logger.info(
             "LiteLLM Generation SUCCESS: model=%s | prompt_tokens=%d | completion_tokens=%d | total_tokens=%d | cost=$%.6f",
@@ -93,14 +96,16 @@ def call_generation_llm(prompt_text: str) -> str:
                     )
                 )
                 
-                # Get usage metadata
+                # Get usage metadata and cost via litellm's model pricing database
                 usage = response.usage_metadata
                 prompt_tokens = getattr(usage, "prompt_token_count", 0)
                 completion_tokens = getattr(usage, "candidates_token_count", 0)
                 total_tokens = getattr(usage, "total_token_count", 0)
                 
-                # Gemini 2.5 Flash pricing: $0.075 / 1M input, $0.30 / 1M output
-                cost = (prompt_tokens * 0.075 / 1e6) + (completion_tokens * 0.30 / 1e6)
+                try:
+                    cost = litellm.completion_cost(model=f"gemini/{gemini_model}", prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
+                except Exception:
+                    cost = 0.0
                 
                 logger.info(
                     "Gemini Generation Fallback SUCCESS: model=%s | prompt_tokens=%d | completion_tokens=%d | total_tokens=%d | cost=$%.6f",

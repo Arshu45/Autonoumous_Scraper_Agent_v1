@@ -81,6 +81,12 @@ def get_session(max_retries: int = 3, initial_delay: float = 1.0) -> Session:
             )
             time.sleep(delay)
 
+    # Defensive: should never be reached because the last iteration either
+    # returns a session or re-raises SATimeoutError. Guard against silent None.
+    raise RuntimeError(
+        f"get_session() failed to acquire a DB connection after {max_retries} attempts."
+    )
+
 
 @contextmanager
 def session_scope():

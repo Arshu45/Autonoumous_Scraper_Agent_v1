@@ -25,6 +25,7 @@ cleanly removed from the root logger after the run completes.
 """
 
 import logging
+import logging.handlers
 import os
 from datetime import datetime, timezone
 
@@ -37,6 +38,11 @@ LOGS_DIR = os.path.join(
 LOG_FORMAT  = "%(asctime)s [%(levelname)-8s] %(name)s: %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+# Rotation limits — each log file grows up to 10 MB, keeping 5 backups.
+# Total max disk usage per source type: ~60 MB (10 MB × 6 files).
+MAX_LOG_BYTES   = 10 * 1024 * 1024   # 10 MB
+BACKUP_COUNT    = 5
+
 from contextlib import contextmanager
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -48,20 +54,28 @@ def build_log_path(source: str = "run") -> str:
     return os.path.join(LOGS_DIR, f"scraper_{ts}_{source}.log")
 
 
-def attach_file_logger(source: str = "run") -> logging.FileHandler:
+def attach_file_logger(source: str = "run") -> logging.handlers.RotatingFileHandler:
     """
-    Create a FileHandler for this run, attach it to the root logger, and
-    return it. Call detach_file_logger(handler) when the run finishes.
+    Create a RotatingFileHandler for this run, attach it to the root logger,
+    and return it. Call detach_file_logger(handler) when the run finishes.
+
+    Each log file is capped at 10 MB with 5 rotated backups to prevent
+    unbounded disk growth from frequent pipeline or agent runs.
 
     Args:
-        source: Short label appended to the filename (cli | pipeline | ui).
+        source: Short label appended to the filename (cli | pipeline | ui | agent).
 
     Returns:
-        The FileHandler so the caller can detach it later.
+        The RotatingFileHandler so the caller can detach it later.
     """
     log_path = build_log_path(source)
 
-    handler = logging.FileHandler(log_path, encoding="utf-8")
+    handler = logging.handlers.RotatingFileHandler(
+        log_path,
+        maxBytes=MAX_LOG_BYTES,
+        backupCount=BACKUP_COUNT,
+        encoding="utf-8",
+    )
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
 
@@ -77,7 +91,7 @@ def attach_file_logger(source: str = "run") -> logging.FileHandler:
     return handler
 
 
-def detach_file_logger(handler: logging.FileHandler | None) -> str:
+def detach_file_logger(handler: logging.Handler | None) -> str:
     """
     Write a closing footer, flush, and safely remove the handler from the root logger.
 

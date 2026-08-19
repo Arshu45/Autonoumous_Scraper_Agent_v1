@@ -5,16 +5,19 @@ import re
 import json
 import logging
 import base64
+import time
 from PIL import Image
 from io import BytesIO
 from typing import Dict, Any, Tuple
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+import litellm
 import google.genai as genai
 from google.genai import types as genai_types
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+litellm.suppress_debug_info = True
 
 from agent.models import SiteAnalysis
 from agent.prompts import EXPLORATION_VISUAL_PROMPT, DOM_ANALYSIS_PROMPT
@@ -33,7 +36,7 @@ ANTI_BOT_CHECKS = {
         marker in dom.lower() for marker in ["recaptcha", "hcaptcha", "turnstile"]
     ),
     "blocked_status_code": lambda resp, dom: resp is not None and resp.status in (403, 429, 503),
-    "suspously_short_dom": lambda resp, dom: len(dom) < 2000,
+    "suspiciously_short_dom": lambda resp, dom: len(dom) < 2000,
     "bot_detection_script": lambda resp, dom: any(
         marker in dom for marker in ["datadome", "perimeterx", "akamai-bot"]
     ),
@@ -133,8 +136,6 @@ def call_exploration_vision(initial_ss_bytes: bytes, post_scroll_ss_bytes: bytes
     messages = [{"role": "user", "content": content}]
 
     # 1. Try primary LiteLLM Claude model
-    import litellm
-    litellm.suppress_debug_info = True
 
     try:
         logger.info("Attempting LiteLLM Vision call using model=%s", model_name)
@@ -159,14 +160,16 @@ def call_exploration_vision(initial_ss_bytes: bytes, post_scroll_ss_bytes: bytes
             
         reply = response.choices[0].message.content
         
-        # Extract token usage and log cost
+        # Extract token usage and cost from LiteLLM response
         usage = response.usage
         prompt_tokens = getattr(usage, "prompt_tokens", 0)
         completion_tokens = getattr(usage, "completion_tokens", 0)
         total_tokens = getattr(usage, "total_tokens", 0)
         
-        # Estimate cost ($1.00 / 1M input, $5.00 / 1M output)
-        cost = (prompt_tokens * 1.00 / 1e6) + (completion_tokens * 5.00 / 1e6)
+        try:
+            cost = litellm.completion_cost(completion_response=response)
+        except Exception:
+            cost = 0.0
         
         logger.info(
             "LiteLLM Vision SUCCESS: model=%s | prompt_tokens=%d | completion_tokens=%d | total_tokens=%d | cost=$%.6f",
@@ -191,7 +194,7 @@ def call_exploration_vision(initial_ss_bytes: bytes, post_scroll_ss_bytes: bytes
             genai_types.Part.from_bytes(data=resized_post, mime_type="image/png"),
         ]
 
-        import time
+        
         for attempt in range(1, 4):
             try:
                 logger.info("Calling Gemini Vision Fallback (model=%s) (attempt %d/3)", gemini_model, attempt)
@@ -204,14 +207,16 @@ def call_exploration_vision(initial_ss_bytes: bytes, post_scroll_ss_bytes: bytes
                     )
                 )
                 
-                # Get usage metadata
+                # Get usage metadata and cost via litellm's model pricing database
                 usage = response.usage_metadata
                 prompt_tokens = getattr(usage, "prompt_token_count", 0)
                 completion_tokens = getattr(usage, "candidates_token_count", 0)
                 total_tokens = getattr(usage, "total_token_count", 0)
                 
-                # Gemini 2.5 Flash pricing: $0.075 / 1M input, $0.30 / 1M output
-                cost = (prompt_tokens * 0.075 / 1e6) + (completion_tokens * 0.30 / 1e6)
+                try:
+                    cost = litellm.completion_cost(model=f"gemini/{gemini_model}", prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
+                except Exception:
+                    cost = 0.0
                 
                 logger.info(
                     "Gemini Vision Fallback SUCCESS: model=%s | prompt_tokens=%d | completion_tokens=%d | total_tokens=%d | cost=$%.6f",
@@ -233,8 +238,6 @@ def call_exploration_reasoning(dom_analysis_prompt_text: str) -> str:
     messages = [{"role": "user", "content": dom_analysis_prompt_text}]
 
     # 1. Try primary LiteLLM model
-    import litellm
-    litellm.suppress_debug_info = True
 
     try:
         logger.info("Attempting LiteLLM Reasoning call using model=%s", model_name)
@@ -259,14 +262,16 @@ def call_exploration_reasoning(dom_analysis_prompt_text: str) -> str:
             
         reply = response.choices[0].message.content
         
-        # Extract token usage and log cost
+        # Extract token usage and cost from LiteLLM response
         usage = response.usage
         prompt_tokens = getattr(usage, "prompt_tokens", 0)
         completion_tokens = getattr(usage, "completion_tokens", 0)
         total_tokens = getattr(usage, "total_tokens", 0)
         
-        # Estimate cost ($1.00 / 1M input, $5.00 / 1M output)
-        cost = (prompt_tokens * 1.00 / 1e6) + (completion_tokens * 5.00 / 1e6)
+        try:
+            cost = litellm.completion_cost(completion_response=response)
+        except Exception:
+            cost = 0.0
         
         logger.info(
             "LiteLLM Reasoning SUCCESS: model=%s | prompt_tokens=%d | completion_tokens=%d | total_tokens=%d | cost=$%.6f",
@@ -285,7 +290,7 @@ def call_exploration_reasoning(dom_analysis_prompt_text: str) -> str:
         client = genai.Client(api_key=gemini_api_key)
         gemini_model = "gemini-2.5-flash"
 
-        import time
+
         for attempt in range(1, 4):
             try:
                 logger.info("Calling Gemini Reasoning Fallback (model=%s) (attempt %d/3)", gemini_model, attempt)
@@ -298,14 +303,16 @@ def call_exploration_reasoning(dom_analysis_prompt_text: str) -> str:
                     )
                 )
                 
-                # Get usage metadata
+                # Get usage metadata and cost via litellm's model pricing database
                 usage = response.usage_metadata
                 prompt_tokens = getattr(usage, "prompt_token_count", 0)
                 completion_tokens = getattr(usage, "candidates_token_count", 0)
                 total_tokens = getattr(usage, "total_token_count", 0)
                 
-                # Gemini 2.5 Flash pricing: $0.075 / 1M input, $0.30 / 1M output
-                cost = (prompt_tokens * 0.075 / 1e6) + (completion_tokens * 0.30 / 1e6)
+                try:
+                    cost = litellm.completion_cost(model=f"gemini/{gemini_model}", prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
+                except Exception:
+                    cost = 0.0
                 
                 logger.info(
                     "Gemini Reasoning Fallback SUCCESS: model=%s | prompt_tokens=%d | completion_tokens=%d | total_tokens=%d | cost=$%.6f",

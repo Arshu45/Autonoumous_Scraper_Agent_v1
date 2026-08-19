@@ -19,7 +19,6 @@ import argparse
 import sys
 import os
 import logging
-from datetime import datetime
 
 # Ensure the root of the project is in the python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -36,36 +35,32 @@ def main():
     parser.add_argument("--log-level", default="INFO", help="Logging level (DEBUG, INFO, WARNING, ERROR)")
     args = parser.parse_args()
 
-    # Configure stdout & file logging
-    log_dir = os.path.join(os.getcwd(), "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file_path = os.path.join(log_dir, f"agent_run_{timestamp}.log")
-
     log_level = getattr(logging, args.log_level.upper(), logging.INFO)
-    
-    # Configure root logger with stream and file handlers
-    handlers = [
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(log_file_path, encoding="utf-8")
-    ]
+
+    # Configure console handler via basicConfig (file handler is managed by scoped_file_logger)
     logging.basicConfig(
         level=log_level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
-        handlers=handlers,
-        force=True
+        format="%(asctime)s [%(levelname)-8s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[logging.StreamHandler(sys.stdout)],
+        force=True,
     )
-    
+
     logger = logging.getLogger("run_scraper_agent")
-    logger.info("Detailed execution log saving to: %s", log_file_path)
 
-    from agent.orchestrator import build_agent_graph
-    from agent.models import AgentState
+    # Use the centralized scoped_file_logger for consistent file logging
+    # (same naming convention, date format, and rotation as pipeline/CLI runs)
+    from scripts.logging_setup import scoped_file_logger
 
-    state = AgentState(url=args.url, brand=args.brand, requirements=args.requirements)
-    graph = build_agent_graph()
-    result = graph.invoke(state)
+    with scoped_file_logger("agent") as log_file_path:
+        logger.info("Detailed execution log saving to: %s", log_file_path)
+
+        from agent.orchestrator import build_agent_graph
+        from agent.models import AgentState
+
+        state = AgentState(url=args.url, brand=args.brand, requirements=args.requirements)
+        graph = build_agent_graph()
+        result = graph.invoke(state)
 
     # Print summary output
     print("\n" + "="*60)

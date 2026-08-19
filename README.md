@@ -55,16 +55,24 @@ GOLD LAYER — Streamlit Intelligence & Approval Dashboard
 The platform includes an end-to-end **LangGraph Autonomous Agent** that builds and verifies scrapers for new retail sites without human manual coding:
 
 ### 1. Agent Workflow Nodes (`agent/`)
-- **Site Exploration (`exploration_agent.py`)**: Navigates target URLs, detects anti-bot challenges (PerimeterX, Cloudflare), inspects DOM structure, and takes high-resolution screenshots.
-- **Config & Scraper Generation (`generation_agent.py`)**: Generates optimized JSON target configurations (`config/targets/<brand>.json`) with custom CSS text selectors, screenshot selectors, and category hints.
-- **Sandbox Validation (`validation_agent.py`)**: Executes generated scraper code inside a single-use Docker container, enforcing strict time limits (default: 240s) and isolation. Calculates a **Confidence Score (0–100)**.
-- **Self-Healing Repair Loop (`repair_agent.py`)**: If validation fails or yields 0 offers, the repair agent analyzes container error logs and rewrites selector patterns (up to 3 retry loops).
-- **Registration & Audit (`registration_agent.py`)**: Auto-approves configurations with confidence ≥ 80, updating `competitors`, `prefect_target_registry`, and writing an immutable entry to `agent_audit_log`.
+- **Site Exploration (`exploration_agent.py`)**: Navigates target URLs, detects anti-bot challenges (PerimeterX, Cloudflare), inspects DOM structure, and takes high-resolution screenshots. Sends screenshots to a Vision LLM for promotional area identification.
+- **Config & Scraper Generation (`generation_agent.py`)**: Generates optimized JSON target configurations (`config/targets/<brand>.json`) with custom CSS text selectors, screenshot selectors, and category hints. Validates selectors against the live page using Playwright to prune hallucinated selectors.
+- **Sandbox Validation (`validation_agent.py`)**: Executes generated scraper code inside a single-use Docker container, enforcing strict time limits (default: 240s) and isolation. Validates extracted offers against a schema and calculates a **Confidence Score (0–100)**.
+- **Registration & Audit (`registration_agent.py`)**: Auto-approves configurations with confidence ≥ 90. Atomically updates `competitors`, `prefect_target_registry`, and writes an immutable entry to `agent_audit_log` inside a single `session.begin()` transaction block.
 
-### 2. Docker Sandbox Security (`agent/sandbox_runner.py` & `Dockerfile.sandbox`)
+### 2. Confidence Score Routing
+| Score Range | Route | Action |
+|---|---|---|
+| ≥ 90 | `auto_approve` | Automatically registered to Prefect pipeline |
+| 70–89 | `pending` | Queued for human review in Streamlit UI |
+| < 70 | `reject` | Discarded; logged for diagnostics |
+
+### 3. Docker Sandbox Security (`agent/sandbox_runner.py` & `docker/Dockerfile.sandbox`)
 - **Network Egress Isolation**: Runs container on `scraper-egress-only` Docker network, blocking non-essential outbound traffic.
+- **Resource Limits**: 768 MB RAM, 1 CPU, 128 PIDs, read-only root filesystem with tmpfs for `/tmp` and `/dev/shm`.
+- **Security Hardening**: All Linux capabilities dropped (`cap_drop=ALL`), `no-new-privileges` enforced.
+- **Violation Detection**: OOM kills, filesystem writes, and network violations are detected and force confidence score to 0.
 - **LiteLLM Offline Configuration**: Configured with `LITELLM_LOCAL_MODEL_COST_MAP=True` to prevent container stalls from remote GitHub cost-map fetches.
-- **Socket & Timeout Protection**: Socket HTTP timeout extended to `timeout_seconds + 30` with explicit container cleanup on completion or failure.
 
 ---
 
@@ -72,7 +80,7 @@ The platform includes an end-to-end **LangGraph Autonomous Agent** that builds a
 
 The Streamlit dashboard includes a dedicated **Agent Approval UI** (`dashboard/approval_ui.py`):
 
-- **Pending Review Feed**: Shows generated configurations requiring human sign-off (confidence < 80).
+- **Pending Review Feed**: Shows generated configurations requiring human sign-off (confidence 70–89).
 - **Dry-Run Validation**: Test scrapers interactively before committing them to production.
 - **Config Editor**: Edit target JSON selectors directly in the UI with instant JSON syntax validation.
 - **Audit Log Viewer**: Full historical audit trail tracking user approvals, rejections, and manual overrides.
@@ -215,9 +223,11 @@ Records historical outcome and confidence metrics for health checks.
 | `run_type` | text | `initial_validation` or `health_check` |
 | `confidence_score` | int | Confidence score (0-100) |
 | `score_breakdown` | jsonb | Detailed metric scoring |
-| `recommendation` | text | `auto_approve`, `review`, or `reject` |
+| `recommendation` | text | `auto_approve`, `pending`, or `reject` |
 | `offers_extracted` | int | Number of extracted offers |
 | `was_auto_approved` | bool | Auto-approval status |
+| `days_since_registration` | int | Days since brand was registered (health checks) |
+| `still_healthy_at_check` | bool | Whether target is still healthy (health checks) |
 | `checked_at` | timestamp | Check timestamp |
 
 ---
@@ -229,7 +239,7 @@ Records historical outcome and confidence metrics for health checks.
 | Agent Orchestration | LangGraph Python |
 | Container Isolation | Docker (Playwright + Python) |
 | Browser Automation | Playwright Python + AntiBotBypassService (`curl_cffi` TLS) |
-| Vision / Text LLM | LiteLLM gateway / Groq / Gemini |
+| Vision / Text LLM | LiteLLM gateway → Claude / Groq / Gemini (automatic failover) |
 | Database | PostgreSQL + SQLAlchemy |
 | Orchestration | Prefect |
 | Dashboard | Streamlit |
@@ -242,40 +252,55 @@ Records historical outcome and confidence metrics for health checks.
 .
 ├── agent/                                  # LangGraph Autonomous Scraper Agent
 │   ├── models.py                          # Agent state schemas (AgentState, ValidationReport)
-│   ├── orchestrator.py                    # LangGraph state graph builder
+│   ├── orchestrator.py                    # LangGraph state graph builder & conditional routing
 │   ├── exploration_agent.py              # Site exploration & anti-bot risk analysis
 │   ├── generation_agent.py               # Selector & target config generator
-│   ├── validation_agent.py               # Validation scoring & verification
-│   ├── sandbox_runner.py                 # Docker sandbox executor
-│   ├── repair_agent.py                   # Self-healing selector repair loop
-│   └── registration_agent.py             # Atomic DB registration & audit logging
+│   ├── validation_agent.py               # Sandbox execution, schema validation & scoring
+│   ├── sandbox_runner.py                 # Docker sandbox executor & violation detection
+│   ├── sandbox_entrypoint.py             # Container bootstrap script (runs inside Docker)
+│   ├── registration_agent.py             # Atomic DB registration & audit logging
+│   └── prompts.py                         # LLM prompt templates (vision, DOM, config gen)
+├── auth/
+│   └── approval_rbac.py                   # Role-based access control (RBAC) placeholder
 ├── config/
 │   ├── teams.json                         # Business team routing rules
 │   └── targets/                           # Per-brand scrape configuration (one JSON per brand)
 ├── database/
-│   ├── connection.py                      # SQLAlchemy engine/session setup
+│   ├── connection.py                      # SQLAlchemy engine/session setup with connection pooling
 │   └── models.py                          # ORM models: Competitor, Promotion, Audit Logs, Registry
 ├── dashboard/
 │   ├── app.py                             # Streamlit dashboard entrypoint
 │   ├── approval_ui.py                     # Human-in-the-loop Approval & Audit UI
 │   └── utils/                             # DB helpers, Excel exporter, styling
-├── Dockerfile.sandbox                      # Isolated sandbox container image definition
+├── docker/
+│   ├── Dockerfile.sandbox                 # Isolated sandbox container image definition
+│   └── setup_egress_network.sh            # Docker network egress filtering setup script
 ├── flows/
 │   └── master_pipeline.py                 # Prefect flow for parallel scraping & retry passes
+├── llm/
+│   ├── base.py                            # Abstract LLMClient base class
+│   ├── factory.py                         # LLM provider factory with fallback support
+│   ├── groq_client.py                     # Groq (LangChain) client implementation
+│   └── litellm_client.py                  # LiteLLM unified client implementation
 ├── promo_scraper/
 │   ├── hybrid_promo_extractor.py          # Core extraction, LLM calls, deduplication
 │   └── anti_bot_service.py                # Multi-tier TLS & browser bypass
 ├── scripts/
 │   ├── run_scraper_agent.py               # CLI entrypoint for autonomous scraper agent
 │   ├── run_health_check.py                # Scraper decay & health monitoring agent
+│   ├── run_hybrid_promo_scraper.py        # Run single target scrape
 │   ├── init_db.py                         # Initialize database tables and schema migrations
 │   ├── reset_db.py                        # Truncate tables (with optional --keep-registry flag)
-│   ├── run_hybrid_promo_scraper.py        # Run single target scrape
-│   └── reassign_teams.py                  # Re-apply team routing rules
-├── tests/                                 # Pytest test suite (29 tests)
+│   ├── reassign_teams.py                  # Re-apply team routing rules
+│   ├── logging_setup.py                   # Centralised logging configuration
+│   └── check_consumption.py               # LiteLLM API consumption checker
+├── services/                              # Business logic services (email, reporting)
+├── tests/                                 # Pytest test suite
 │   ├── test_team_policy_engine.py
 │   ├── test_exporter.py
 │   └── agent/                             # Agent & sandbox test suite
+├── alembic/                               # Database migration scripts
+├── alembic.ini                            # Alembic configuration
 ├── requirements.txt
 ├── .env.example                           # Environment configuration template
 └── .env                                   # Local configuration and credentials
@@ -294,7 +319,10 @@ pip install -r requirements.txt
 playwright install
 
 # Build the Docker Sandbox image for agent validation
-docker build -t scraper-sandbox:latest -f Dockerfile.sandbox .
+docker build -t promo-scraper-sandbox:latest -f docker/Dockerfile.sandbox .
+
+# Create the egress-filtered Docker network for sandbox isolation
+./docker/setup_egress_network.sh create <target-domain>
 ```
 
 ### 2. Initialize Database
@@ -329,9 +357,6 @@ Open [http://localhost:8501](http://localhost:8501) to view promotional feeds an
 
 ## Running Tests
 
-Run the full pytest suite (29 tests):
-
 ```bash
 pytest
 ```
-

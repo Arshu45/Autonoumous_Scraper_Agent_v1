@@ -9,6 +9,7 @@ populates state.validation_report.
 
 from __future__ import annotations
 
+import os
 import json
 import logging
 from typing import Any
@@ -263,7 +264,6 @@ def run_validation_agent(state: AgentState) -> AgentState:
         anti_bot_risk = state.site_analysis.anti_bot_risk
 
     # Read timeout from env var or default to 240s (to accommodate multi-element Vision extractions inside container)
-    import os
     sandbox_timeout = int(os.getenv("SANDBOX_TIMEOUT_SECONDS", "240"))
     try:
         sandbox_result = run_scraper_in_sandbox(

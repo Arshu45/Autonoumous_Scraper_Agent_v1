@@ -103,35 +103,51 @@ def call_exploration_vision(initial_ss_bytes: bytes, post_scroll_ss_bytes: bytes
     
     # Resize images before sending to Vision API.
     # full_page=True screenshots can be 5000-8000px tall on retail homepages.
-    # Cap at 1600×4000 to stay within token limits while keeping enough detail
-    # for the LLM to read text and identify promotional elements.
+    # Cap at 1600×4000 px to stay within Vision LLM token limits while keeping
+    # enough detail for the LLM to read promotional text and banner layouts.
     MAX_WIDTH  = 1600
     MAX_HEIGHT = 4000
 
-    def resize_img(data: bytes) -> bytes:
+    def encode_img(data: bytes) -> bytes:
+        """
+        Resize to pixel limits then re-encode as JPEG quality=85.
+
+        PNG is lossless — a 1600×3500 px full-page screenshot can easily exceed
+        the 5 MB per-image limit enforced by Claude via AWS Bedrock (observed:
+        Van Heusen at 5.14 MB). JPEG at quality=85 is visually indistinguishable
+        from PNG for promotional banners (large bold text, flat colour blocks,
+        hero images) while being 8–12× smaller — keeping full resolution and
+        eliminating the size error without any iterative shrinking.
+        """
         try:
             img = Image.open(BytesIO(data))
             w, h = img.width, img.height
             if w > MAX_WIDTH or h > MAX_HEIGHT:
                 ratio = min(MAX_WIDTH / w, MAX_HEIGHT / h)
                 img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+            # Convert RGBA/P-mode images (common from Playwright PNG screenshots)
+            # to RGB before JPEG encoding — JPEG does not support alpha channels.
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
             buf = BytesIO()
-            img.save(buf, format="PNG")
+            img.save(buf, format="JPEG", quality=85, optimize=True)
+            size_kb = len(buf.getvalue()) / 1024
+            logger.debug("Screenshot encoded: %dx%d px, %.1f KB (JPEG q=85)", img.width, img.height, size_kb)
             return buf.getvalue()
         except Exception as e:
-            logger.warning("Image resize failed: %s", e)
+            logger.warning("Image encode failed: %s — sending raw bytes", e)
             return data
 
-    resized_initial = resize_img(initial_ss_bytes)
-    resized_post = resize_img(post_scroll_ss_bytes)
+    resized_initial = encode_img(initial_ss_bytes)
+    resized_post = encode_img(post_scroll_ss_bytes)
 
     b64_initial = base64.b64encode(resized_initial).decode("utf-8")
     b64_post = base64.b64encode(resized_post).decode("utf-8")
 
     content = [
         {"type": "text", "text": EXPLORATION_VISUAL_PROMPT},
-        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_initial}"}},
-        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_post}"}},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_initial}"}},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_post}"}},
     ]
     messages = [{"role": "user", "content": content}]
 
@@ -190,8 +206,8 @@ def call_exploration_vision(initial_ss_bytes: bytes, post_scroll_ss_bytes: bytes
 
         gemini_contents = [
             EXPLORATION_VISUAL_PROMPT,
-            genai_types.Part.from_bytes(data=resized_initial, mime_type="image/png"),
-            genai_types.Part.from_bytes(data=resized_post, mime_type="image/png"),
+            genai_types.Part.from_bytes(data=resized_initial, mime_type="image/jpeg"),
+            genai_types.Part.from_bytes(data=resized_post, mime_type="image/jpeg"),
         ]
 
         

@@ -108,6 +108,11 @@ def run_registration(state: AgentState) -> AgentState:
     logger.info("Config file verified at %s", config_path)
 
     # ── 3. Atomic DB writes ────────────────────────────────────────────────────
+    # With autocommit=False (the default), get_session() returns a session with
+    # an already-active transaction (auto-begun by session.connection() during
+    # pool health check). All operations below run inside this single implicit
+    # transaction. session.commit() persists all 3 writes atomically;
+    # session.rollback() in the except block undoes everything on failure.
     session = get_session()
     try:
         # 3a. UPSERT competitors row
@@ -176,27 +181,32 @@ def run_registration(state: AgentState) -> AgentState:
     finally:
         session.close()
 
-    # ── 4. Write agent_run_outcomes (non-critical) ─────────────────────────────
+    # ── 4. Mark existing agent_run_outcomes row as auto-approved (non-critical) ──
+    # The validation agent already inserted the agent_run_outcomes row with
+    # was_auto_approved=False. We UPDATE that row here instead of inserting a
+    # duplicate, so dashboard queries and health-check aggregations are accurate.
     try:
         outcome_session = get_session()
         try:
-            outcome_session.add(AgentRunOutcome(
-                brand=brand,
-                run_type="initial_validation",
-                confidence_score=validation_report.confidence_score,
-                score_breakdown=validation_report.score_breakdown or {},
-                recommendation=validation_report.recommendation,
-                offers_extracted=validation_report.offers_extracted,
-                was_auto_approved=True,
-                days_since_registration=None,
-                still_healthy_at_check=None,
-            ))
-            outcome_session.commit()
-            logger.info("Inserted agent_run_outcomes for brand=%s", brand)
+            existing_outcome = (
+                outcome_session.query(AgentRunOutcome)
+                .filter_by(brand=brand, run_type="initial_validation")
+                .order_by(AgentRunOutcome.id.desc())
+                .first()
+            )
+            if existing_outcome:
+                existing_outcome.was_auto_approved = True
+                outcome_session.commit()
+                logger.info("Updated agent_run_outcomes was_auto_approved=True for brand=%s", brand)
+            else:
+                logger.warning(
+                    "No existing agent_run_outcomes row found for brand=%s to mark as auto-approved",
+                    brand,
+                )
         except Exception as exc:
             outcome_session.rollback()
             logger.warning(
-                "Failed to write agent_run_outcomes for brand=%s (non-critical): %s",
+                "Failed to update agent_run_outcomes for brand=%s (non-critical): %s",
                 brand, exc,
             )
         finally:

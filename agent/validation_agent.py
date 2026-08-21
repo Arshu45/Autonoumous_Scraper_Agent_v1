@@ -189,8 +189,9 @@ def _compute_confidence_score(
     else:
         breakdown["violation_override"] = False
 
+    score = min(100, max(0, score))
     breakdown["final_score"] = score
-    return max(0, score), breakdown
+    return score, breakdown
 
 
 # ---------------------------------------------------------------------------
